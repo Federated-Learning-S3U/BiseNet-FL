@@ -18,12 +18,13 @@ import torch
 import torch.nn as nn
 import torch.distributed as dist
 from torch.utils.data import DataLoader
+
 import torch.amp as amp
 
 from lib.models import model_factory
 from configs import set_cfg_from_file
 from lib.data import get_data_loader
-from evaluate import eval_model
+from tools.evaluate import eval_model
 from lib.ohem_ce_loss import OhemCELoss
 from lib.lr_scheduler import WarmupPolyLrScheduler
 from lib.meters import TimeMeter, AvgMeter
@@ -46,7 +47,7 @@ def parse_args():
         "--config",
         dest="config",
         type=str,
-        default="configs/bisenetv2.py",
+        default="configs/bisenetv2_city.py",
     )
     parse.add_argument(
         "--finetune-from",
@@ -121,7 +122,7 @@ def set_optimizer(model):
 
 
 def set_model_dist(net):
-    local_rank = int(os.environ["LOCAL_RANK"])
+    local_rank = int(os.environ.get("LOCAL_RANK", "0"))
     net = nn.parallel.DistributedDataParallel(
         net,
         device_ids=[
@@ -176,6 +177,20 @@ def train():
     )
 
     ## train loop
+    # compute iterations per epoch using training dataset size and global batch size
+    if dist.is_initialized():
+        world_size = dist.get_world_size()
+    else:
+        world_size = 1
+    n_train_imgs = len(dl.dataset)
+    train_batch_global = cfg.ims_per_gpu * world_size
+    train_iters_per_epoch = int(np.ceil(n_train_imgs * 1.0 / train_batch_global))
+
+    eval_every_epochs = cfg.get("eval_every_epochs", 5)
+    eval_every_iters = int(train_iters_per_epoch * eval_every_epochs)
+
+    best_val_miou = -1.0
+
     for it, (im, lb) in enumerate(dl):
         im = im.cuda()
         lb = lb.cuda()
@@ -192,6 +207,9 @@ def train():
         scaler.step(optim)
         scaler.update()
         torch.cuda.synchronize()
+
+        # step LR scheduler after optimizer step (avoid calling scheduler before optimizer.step())
+        lr_schdr.step()
 
         time_meter.update()
         loss_meter.update(loss.item())
@@ -212,18 +230,75 @@ def train():
                 loss_aux_meters,
             )
             logger.info(msg)
-        lr_schdr.step()
 
-    ## dump the final model and evaluate the result
+        # periodic evaluation (after eval_every_epochs)
+        if eval_every_iters > 0 and (
+            (it + 1) % eval_every_iters == 0 or (it + 1) == cfg.max_iter
+        ):
+            # run distributed-safe evaluation
+            # sync all workers before eval
+            if dist.is_initialized():
+                dist.barrier()
+            torch.cuda.empty_cache()
+            logger.info(f"\nStarting evaluation at iter {it+1}")
+            iou_heads, iou_content, f1_heads, f1_content, metrics_summary = eval_model(
+                cfg, net.module
+            )
+
+            # structured metric selection
+            cur_miou = metrics_summary.get("selected_miou", None)
+            logger.info("current validation miou: %s" % (cur_miou,))
+
+            # log results (only rank 0 prints and saves)
+            if (not dist.is_initialized()) or dist.get_rank() == 0:
+                logger.info("\neval results of f1 score metric:")
+                logger.info(
+                    "\n" + tabulate(f1_content, headers=f1_heads, tablefmt="orgtbl")
+                )
+                logger.info("\neval results of miou metric:")
+                logger.info(
+                    "\n" + tabulate(iou_content, headers=iou_heads, tablefmt="orgtbl")
+                )
+
+                # save last checkpoint
+                last_pth = osp.join(cfg.respth, f"model_iter_{it+1}_last.pth")
+                torch.save(net.module.state_dict(), last_pth)
+                logger.info(f"saved last model to {last_pth}")
+
+                # save best checkpoint based on validation miou
+                if cur_miou is not None and cur_miou > best_val_miou:
+                    best_val_miou = cur_miou
+                    best_pth = osp.join(cfg.respth, "model_best.pth")
+                    torch.save(net.module.state_dict(), best_pth)
+                    logger.info(
+                        f"new best miou {best_val_miou:.6f} saved to {best_pth}"
+                    )
+
+            # restore train mode
+            net.train()
+            torch.cuda.empty_cache()
+            # sync again to make sure rank 0 finished saving before training continues
+            if dist.is_initialized():
+                dist.barrier()
+
+    # final save and eval
     save_pth = osp.join(cfg.respth, "model_final.pth")
     logger.info("\nsave models to {}".format(save_pth))
     state = net.module.state_dict()
-    if dist.get_rank() == 0:
+    if (not dist.is_initialized()) or dist.get_rank() == 0:
         torch.save(state, save_pth)
 
     logger.info("\nevaluating the final model")
+    # sync all workers before final eval
+    if dist.is_initialized():
+        dist.barrier()
     torch.cuda.empty_cache()
-    iou_heads, iou_content, f1_heads, f1_content = eval_model(cfg, net.module)
+    iou_heads, iou_content, f1_heads, f1_content, metrics_summary = eval_model(
+        cfg, net.module
+    )
+    # sync after final eval to ensure saving is complete
+    if dist.is_initialized():
+        dist.barrier()
     logger.info("\neval results of f1 score metric:")
     logger.info("\n" + tabulate(f1_content, headers=f1_heads, tablefmt="orgtbl"))
     logger.info("\neval results of miou metric:")
@@ -233,7 +308,7 @@ def train():
 
 
 def main():
-    local_rank = int(os.environ["LOCAL_RANK"])
+    local_rank = int(os.environ.get("LOCAL_RANK", "0"))
     torch.cuda.set_device(local_rank)
     dist.init_process_group(backend="nccl")
 

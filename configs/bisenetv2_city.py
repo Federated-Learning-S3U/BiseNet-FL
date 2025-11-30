@@ -16,8 +16,9 @@ cfg = dict(
     eval_crop=[1024, 1024],
     eval_scales=[0.5, 0.75, 1.0, 1.25, 1.5, 1.75],
     ims_per_gpu=4,
-    eval_ims_per_gpu=2,
+    eval_ims_per_gpu=1,
     use_fp16=True,
     use_sync_bn=True,
     respth="./res",
+    eval_every_epochs=1,
 )
