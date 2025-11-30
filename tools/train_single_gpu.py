@@ -16,7 +16,8 @@ from tabulate import tabulate
 
 import torch
 import torch.nn as nn
-import torch.distributed as dist
+
+# import torch.distributed as dist  <-- NOT NEEDED
 from torch.utils.data import DataLoader
 import torch.amp as amp
 
@@ -30,23 +31,13 @@ from lib.meters import TimeMeter, AvgMeter
 from lib.logger import setup_logger, log_msg
 
 
-## fix all random seeds
-#  torch.manual_seed(123)
-#  torch.cuda.manual_seed(123)
-#  np.random.seed(123)
-#  random.seed(123)
-#  torch.backends.cudnn.deterministic = True
-#  torch.backends.cudnn.benchmark = True
-#  torch.multiprocessing.set_sharing_strategy('file_system')
-
-
 def parse_args():
     parse = argparse.ArgumentParser()
     parse.add_argument(
         "--config",
         dest="config",
         type=str,
-        default="configs/bisenetv2.py",
+        default="configs/bisenetv2_city.py",
     )
     parse.add_argument(
         "--finetune-from",
@@ -70,8 +61,10 @@ def set_model(lb_ignore=255):
         )
         logger.info("\tmissing keys: " + json.dumps(msg.missing_keys))
         logger.info("\tunexpected keys: " + json.dumps(msg.unexpected_keys))
-    if cfg.use_sync_bn:
-        net = nn.SyncBatchNorm.convert_sync_batchnorm(net)
+
+    # SyncBN is only for Multi-GPU. Convert back to standard BN for single GPU.
+    # if cfg.use_sync_bn: net = nn.SyncBatchNorm.convert_sync_batchnorm(net)
+
     net.cuda()
     net.train()
     criteria_pre = OhemCELoss(0.7, lb_ignore)
@@ -84,7 +77,6 @@ def set_optimizer(model):
         wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = (
             model.get_params()
         )
-        #  wd_val = cfg.weight_decay
         wd_val = 0
         params_list = [
             {
@@ -120,19 +112,6 @@ def set_optimizer(model):
     return optim
 
 
-def set_model_dist(net):
-    local_rank = int(os.environ["LOCAL_RANK"])
-    net = nn.parallel.DistributedDataParallel(
-        net,
-        device_ids=[
-            local_rank,
-        ],
-        #  find_unused_parameters=True,
-        output_device=local_rank,
-    )
-    return net
-
-
 def set_meters():
     time_meter = TimeMeter(cfg.max_iter)
     loss_meter = AvgMeter("loss")
@@ -147,6 +126,8 @@ def train():
     logger = logging.getLogger()
 
     ## dataset
+    # IMPORTANT: get_data_loader usually checks if dist is initialized.
+    # Since we removed dist, it should default to a standard RandomSampler.
     dl = get_data_loader(cfg, mode="train")
 
     ## model
@@ -157,9 +138,6 @@ def train():
 
     ## mixed precision training
     scaler = amp.GradScaler()
-
-    ## ddp training
-    net = set_model_dist(net)
 
     ## meters
     time_meter, loss_meter, loss_pre_meter, loss_aux_meters = set_meters()
@@ -188,6 +166,7 @@ def train():
             loss_pre = criteria_pre(logits, lb)
             loss_aux = [crit(lgt, lb) for crit, lgt in zip(criteria_aux, logits_aux)]
             loss = loss_pre + sum(loss_aux)
+
         scaler.scale(loss).backward()
         scaler.step(optim)
         scaler.update()
@@ -217,13 +196,19 @@ def train():
     ## dump the final model and evaluate the result
     save_pth = osp.join(cfg.respth, "model_final.pth")
     logger.info("\nsave models to {}".format(save_pth))
-    state = net.module.state_dict()
-    if dist.get_rank() == 0:
-        torch.save(state, save_pth)
+
+    # No need for net.module.state_dict() because we aren't using DDP wrapper
+    state = net.state_dict()
+
+    # No need to check rank, we are the only process
+    torch.save(state, save_pth)
 
     logger.info("\nevaluating the final model")
     torch.cuda.empty_cache()
-    iou_heads, iou_content, f1_heads, f1_content = eval_model(cfg, net.module)
+
+    # Pass 'net' directly, not 'net.module'
+    iou_heads, iou_content, f1_heads, f1_content = eval_model(cfg, net)
+
     logger.info("\neval results of f1 score metric:")
     logger.info("\n" + tabulate(f1_content, headers=f1_heads, tablefmt="orgtbl"))
     logger.info("\neval results of miou metric:")
@@ -233,9 +218,7 @@ def train():
 
 
 def main():
-    local_rank = int(os.environ["LOCAL_RANK"])
-    torch.cuda.set_device(local_rank)
-    dist.init_process_group(backend="nccl")
+    torch.cuda.set_device(0)
 
     if not osp.exists(cfg.respth):
         os.makedirs(cfg.respth)
