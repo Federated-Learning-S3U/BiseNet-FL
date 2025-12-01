@@ -6,9 +6,7 @@ import sys
 sys.path.insert(0, ".")
 import os
 import os.path as osp
-import random
 import logging
-import time
 import json
 import argparse
 import numpy as np
@@ -17,9 +15,9 @@ from tabulate import tabulate
 import torch
 import torch.nn as nn
 import torch.distributed as dist
-from torch.utils.data import DataLoader
 
 import torch.amp as amp
+import gc
 
 from lib.models import model_factory
 from configs import set_cfg_from_file
@@ -147,6 +145,42 @@ def set_meters():
 def train():
     logger = logging.getLogger()
 
+    def _extract_miou_from_iou_content(heads, iou_content, target_col="ss"):
+        """
+        Extracts the mIoU value for a specific column (default 'ss').
+        Requires 'heads' from print_res_table to map the column name to an index.
+        """
+        if iou_content is None or heads is None:
+            return None
+
+        # 1. Find the index of the column we want (e.g., 'ss')
+        try:
+            # heads structure is usually [tname, "ratio", "ss", "ms", ...]
+            target_idx = heads.index(target_col)
+        except ValueError:
+            # If 'ss' isn't in the headers, return None or handle error
+            return None
+
+        # 2. Iterate through rows to find the mIoU row
+        for row in reversed(iou_content):
+            try:
+                key = str(row[0]).lower()
+            except Exception:
+                continue
+
+            # Check if this is the mIoU row
+            if key == "mious":
+                try:
+                    # 3. Return the value at the specific column index
+                    return float(row[target_idx])
+                except IndexError:
+                    # The row might be shorter than the headers
+                    return None
+                except Exception:
+                    return None
+
+        return None
+
     ## dataset
     dl = get_data_loader(cfg, mode="train")
 
@@ -241,12 +275,10 @@ def train():
                 dist.barrier()
             torch.cuda.empty_cache()
             logger.info(f"\nStarting evaluation at iter {it+1}")
-            iou_heads, iou_content, f1_heads, f1_content, metrics_summary = eval_model(
-                cfg, net.module
-            )
+            iou_heads, iou_content, f1_heads, f1_content = eval_model(cfg, net.module)
 
-            # structured metric selection
-            cur_miou = metrics_summary.get("selected_miou", None)
+            # extract numeric miou from tabulated iou_content
+            cur_miou = _extract_miou_from_iou_content(iou_heads, iou_content)
             logger.info("current validation miou: %s" % (cur_miou,))
 
             # log results (only rank 0 prints and saves)
@@ -277,6 +309,13 @@ def train():
             # restore train mode
             net.train()
             torch.cuda.empty_cache()
+            # free evaluation artifacts and collect garbage to reduce memory fragmentation
+            try:
+                del iou_heads, iou_content, f1_heads, f1_content
+            except Exception:
+                pass
+            gc.collect()
+            torch.cuda.empty_cache()
             # sync again to make sure rank 0 finished saving before training continues
             if dist.is_initialized():
                 dist.barrier()
@@ -293,9 +332,7 @@ def train():
     if dist.is_initialized():
         dist.barrier()
     torch.cuda.empty_cache()
-    iou_heads, iou_content, f1_heads, f1_content, metrics_summary = eval_model(
-        cfg, net.module
-    )
+    iou_heads, iou_content, f1_heads, f1_content = eval_model(cfg, net.module)
     # sync after final eval to ensure saving is complete
     if dist.is_initialized():
         dist.barrier()
@@ -303,6 +340,14 @@ def train():
     logger.info("\n" + tabulate(f1_content, headers=f1_heads, tablefmt="orgtbl"))
     logger.info("\neval results of miou metric:")
     logger.info("\n" + tabulate(iou_content, headers=iou_heads, tablefmt="orgtbl"))
+
+    # free evaluation artifacts and collect garbage before finishing
+    try:
+        del iou_heads, iou_content, f1_heads, f1_content
+    except Exception:
+        pass
+    gc.collect()
+    torch.cuda.empty_cache()
 
     return
 
