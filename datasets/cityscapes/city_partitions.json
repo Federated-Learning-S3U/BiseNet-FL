@@ -1,6 +1,6 @@
 {
     "0": {
-        "city_name": "aachen",
+        "client_name": "aachen",
         "num_samples": 174,
         "data": [
             [
@@ -702,7 +702,7 @@
         ]
     },
     "1": {
-        "city_name": "bochum",
+        "client_name": "bochum",
         "num_samples": 96,
         "data": [
             [
@@ -1092,7 +1092,7 @@
         ]
     },
     "2": {
-        "city_name": "bremen",
+        "client_name": "bremen",
         "num_samples": 316,
         "data": [
             [
@@ -2362,7 +2362,7 @@
         ]
     },
     "3": {
-        "city_name": "cologne",
+        "client_name": "cologne",
         "num_samples": 154,
         "data": [
             [
@@ -2984,7 +2984,7 @@
         ]
     },
     "4": {
-        "city_name": "darmstadt",
+        "client_name": "darmstadt",
         "num_samples": 85,
         "data": [
             [
@@ -3330,7 +3330,7 @@
         ]
     },
     "5": {
-        "city_name": "dusseldorf",
+        "client_name": "dusseldorf",
         "num_samples": 221,
         "data": [
             [
@@ -4220,7 +4220,7 @@
         ]
     },
     "6": {
-        "city_name": "erfurt",
+        "client_name": "erfurt",
         "num_samples": 109,
         "data": [
             [
@@ -4662,7 +4662,7 @@
         ]
     },
     "7": {
-        "city_name": "hamburg",
+        "client_name": "hamburg",
         "num_samples": 248,
         "data": [
             [
@@ -5660,7 +5660,7 @@
         ]
     },
     "8": {
-        "city_name": "hanover",
+        "client_name": "hanover",
         "num_samples": 196,
         "data": [
             [
@@ -6450,7 +6450,7 @@
         ]
     },
     "9": {
-        "city_name": "jena",
+        "client_name": "jena",
         "num_samples": 119,
         "data": [
             [
@@ -6932,7 +6932,7 @@
         ]
     },
     "10": {
-        "city_name": "krefeld",
+        "client_name": "krefeld",
         "num_samples": 99,
         "data": [
             [
@@ -7334,7 +7334,7 @@
         ]
     },
     "11": {
-        "city_name": "monchengladbach",
+        "client_name": "monchengladbach",
         "num_samples": 94,
         "data": [
             [
@@ -7716,7 +7716,7 @@
         ]
     },
     "12": {
-        "city_name": "strasbourg",
+        "client_name": "strasbourg",
         "num_samples": 365,
         "data": [
             [
@@ -9182,7 +9182,7 @@
         ]
     },
     "13": {
-        "city_name": "stuttgart",
+        "client_name": "stuttgart",
         "num_samples": 196,
         "data": [
             [
@@ -9972,7 +9972,7 @@
         ]
     },
     "14": {
-        "city_name": "tubingen",
+        "client_name": "tubingen",
         "num_samples": 144,
         "data": [
             [
@@ -10554,7 +10554,7 @@
         ]
     },
     "15": {
-        "city_name": "ulm",
+        "client_name": "ulm",
         "num_samples": 95,
         "data": [
             [
@@ -10940,7 +10940,7 @@
         ]
     },
     "16": {
-        "city_name": "weimar",
+        "client_name": "weimar",
         "num_samples": 142,
         "data": [
             [
@@ -11514,7 +11514,7 @@
         ]
     },
     "17": {
-        "city_name": "zurich",
+        "client_name": "zurich",
         "num_samples": 122,
         "data": [
             [
