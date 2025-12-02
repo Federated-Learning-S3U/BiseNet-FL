@@ -27,7 +27,7 @@ from lib.ohem_ce_loss import OhemCELoss
 from lib.lr_scheduler import WarmupPolyLrScheduler
 from lib.meters import TimeMeter, AvgMeter
 from lib.logger import setup_logger, log_msg
-
+from tools.utils import parse_args
 
 ## fix all random seeds
 #  torch.manual_seed(123)
@@ -37,22 +37,6 @@ from lib.logger import setup_logger, log_msg
 #  torch.backends.cudnn.deterministic = True
 #  torch.backends.cudnn.benchmark = True
 #  torch.multiprocessing.set_sharing_strategy('file_system')
-
-
-def parse_args():
-    parse = argparse.ArgumentParser()
-    parse.add_argument(
-        "--config",
-        dest="config",
-        type=str,
-        default="configs/bisenetv2_city.py",
-    )
-    parse.add_argument(
-        "--finetune-from",
-        type=str,
-        default=None,
-    )
-    return parse.parse_args()
 
 
 args = parse_args()
@@ -242,7 +226,6 @@ def train():
         scaler.update()
         torch.cuda.synchronize()
 
-        # step LR scheduler after optimizer step (avoid calling scheduler before optimizer.step())
         lr_schdr.step()
 
         time_meter.update()
