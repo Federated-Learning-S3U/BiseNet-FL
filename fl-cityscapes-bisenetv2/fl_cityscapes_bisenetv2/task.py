@@ -1,45 +1,19 @@
 """fl-cityscapes-bisenetv2: A Flower / PyTorch app."""
 
 import json
+import numpy as np
+
 import torch
-from torch.utils.data import DataLoader
 import torch.amp as amp
 
-from lib.clients.cityscapes_client_dataset import CityScapesClientDataset
-import lib.data.transform_cv2 as T
+from flwr.app import ArrayRecord, MetricRecord, Context
+
+
+from lib.models import BiSeNetV2
 from lib.ohem_ce_loss import OhemCELoss
+from tools.eval_metrics import compute_eval_metrics
 
-
-def load_data(
-    data_root: str,
-    partitions: str,
-    partition_id: int,
-    batch_size: int,
-    scales: list,
-    cropsize: list,
-):
-    """Load partition CityScapes data."""
-    with open(partitions, "r") as f:
-        data_partitions = json.load(f)
-
-    partition = data_partitions[str(partition_id)]
-
-    ds = CityScapesClientDataset(
-        data_root,
-        partition["data"],
-        T.TransformationTrain(scales, cropsize),
-    )
-
-    # Construct dataloaders
-    trainloader = DataLoader(
-        ds,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=4,
-        pin_memory=True,
-        drop_last=True,
-    )
-    return trainloader
+from fl_cityscapes_bisenetv2.data_preparation.datasets import load_server_eval_data
 
 
 def train(net, trainloader, epochs, lr, device, num_aux_heads):
@@ -113,18 +87,102 @@ def train(net, trainloader, epochs, lr, device, num_aux_heads):
     return avg_trainloss
 
 
-# def test(net, testloader, device): # TODO: Add evaluation function either per client or per server
-#     """Validate the model on the test set."""
-#     net.to(device)
-#     criterion = torch.nn.CrossEntropyLoss()
-#     correct, loss = 0, 0.0
-#     with torch.no_grad():
-#         for batch in testloader:
-#             images = batch["img"].to(device)
-#             labels = batch["label"].to(device)
-#             outputs = net(images)
-#             loss += criterion(outputs, labels).item()
-#             correct += (torch.max(outputs.data, 1)[1] == labels).sum().item()
-#     accuracy = correct / len(testloader.dataset)
-#     loss = loss / len(testloader)
-#     return loss, accuracy
+def test(net, testloader, device):
+    """Validate the model on the test set."""
+
+    org_aux = net.aux_mode
+    net.aux_mode = "eval"
+    net.eval()
+
+    lb_ignore = 255  # TODO
+
+    all_y_true, all_y_pred = [], []
+    with torch.no_grad():
+        for batch_idx, (im, lb) in enumerate(testloader):
+            images = im.to(device)
+            labels = lb
+
+            outputs = net(images)[0]
+
+            all_y_true.append(labels.flatten())
+
+            preds = torch.argmax(outputs, dim=1).cpu().numpy()
+            all_y_pred.append(preds.flatten())
+
+    final_y_true = np.concatenate(all_y_true)
+    final_y_pred = np.concatenate(all_y_pred)
+
+    metrics = compute_eval_metrics(
+        y_true=final_y_true,
+        y_pred=final_y_pred,
+        num_classes=net.num_classes,
+        ignore_index=lb_ignore,
+    )
+
+    net.aux_mode = org_aux
+
+    return metrics  # TODO: Add Loss
+
+
+def make_central_evaluate(context: Context):
+    def central_evaluate(server_round: int, arrays: ArrayRecord) -> MetricRecord:
+        """Evaluate the global model on the server side (optional)."""
+
+        if server_round == 0:
+            return MetricRecord({})
+
+        # Read run config
+        num_rounds: int = context.run_config["num-server-rounds"]
+        fraction_train: float = context.run_config["fraction-train"]
+
+        server_device: str = context.run_config["server-device"]
+
+        eval_batch_size: int = context.run_config["eval-batch-size"]
+        eval_interval: int = context.run_config["eval-interval"]
+
+        local_epochs: int = context.run_config["local-epochs"]
+        batch_size: int = context.run_config["batch_size"]
+
+        im_root: str = context.run_config["im_root"]
+        client_data_partition: str = context.run_config["client_data_partition"]
+        server_data_partition: str = context.run_config["server_data_partition"]
+
+        num_classes: int = context.run_config["num_classes"]
+
+        lr: float = context.run_config["lr"]
+        weight_decay: float = context.run_config["weight_decay"]
+
+        num_aux_heads: int = context.run_config["num_aux_heads"]
+
+        scales: list = json.loads(context.run_config["scales"])
+        cropsize: list = json.loads(context.run_config["cropsize"])
+
+        save_path: str = context.run_config["respth"]
+
+        # Load Global Model
+        model = BiSeNetV2(num_classes)
+        model.load_state_dict(arrays.to_torch_state_dict())
+
+        device = torch.device(server_device)
+
+        print("=" * 50)
+        print(f"Server evaluation using device: {device}")
+        print("Server round {} / {}".format(server_round, num_rounds))
+        print("=" * 50)
+
+        model.to(device)
+
+        # Load the entire Cityscapes val dataset
+        eval_loader = load_server_eval_data(
+            data_root=im_root,
+            data_file=server_data_partition,
+            batch_size=eval_batch_size,
+        )
+
+        # Evaluate the model on the test set
+        metrics = test(model, eval_loader, device)
+
+        # Return the evaluation metrics
+        return MetricRecord(metrics)
+
+    return central_evaluate

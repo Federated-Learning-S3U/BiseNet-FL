@@ -6,9 +6,7 @@ import torch
 from flwr.app import ArrayRecord, Context, Message, MetricRecord, RecordDict
 from flwr.clientapp import ClientApp
 
-from fl_cityscapes_bisenetv2.task import load_data
-
-# from fl_cityscapes_bisenetv2.task import test as test_fn
+from fl_cityscapes_bisenetv2.data_preparation.datasets import load_client_train_data
 from fl_cityscapes_bisenetv2.task import train as train_fn
 
 from lib.models import BiSeNetV2
@@ -51,7 +49,7 @@ def train(msg: Message, context: Context):
 
     # Load the data
     partition_id = context.node_config["partition-id"]
-    trainloader = load_data(
+    trainloader = load_client_train_data(
         im_root, client_data_partition, partition_id, batch_size, scales, cropsize
     )
 
@@ -76,7 +74,7 @@ def train(msg: Message, context: Context):
     return Message(content=content, reply_to=msg)
 
 
-# @app.evaluate() # TODO: Add evaluation function either per client or per server
+# @app.evaluate() # TODO: Add evaluation function per client
 # def evaluate(msg: Message, context: Context):
 #     """Evaluate the model on local data."""
 

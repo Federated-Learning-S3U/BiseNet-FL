@@ -9,6 +9,8 @@ from flwr.serverapp.strategy import FedAvg
 
 from lib.models import BiSeNetV2
 
+from fl_cityscapes_bisenetv2.task import make_central_evaluate
+
 # Create ServerApp
 app = ServerApp()
 
@@ -43,6 +45,9 @@ def main(grid: Grid, context: Context) -> None:
     global_model = BiSeNetV2(num_classes)
     arrays = ArrayRecord(global_model.state_dict())
 
+    # Create central evaluation function that accepts context as an argument
+    evaluate_fn = make_central_evaluate(context)
+
     # Initialize FedAvg strategy
     strategy = FedAvg(fraction_train=fraction_train, fraction_evaluate=0.0)
 
@@ -52,6 +57,7 @@ def main(grid: Grid, context: Context) -> None:
         initial_arrays=arrays,
         train_config=ConfigRecord({"lr": lr}),
         num_rounds=num_rounds,
+        evaluate_fn=evaluate_fn,
     )
 
     # Save final model to disk
