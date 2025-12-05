@@ -3,7 +3,7 @@ import os
 
 import numpy as np
 import cv2
-import tqdm
+from tqdm import tqdm
 from torch.utils.data import Dataset
 import lib.data.transform_cv2 as T
 
@@ -25,7 +25,7 @@ class CityScapesClientDataset(Dataset):
         self.data_root = data_root
         self.data = data
         self.transform = transform
-        self.to_tensor = T.ToTensor(self._compute_mean_std())
+        self.to_tensor = T.ToTensor(*self._compute_mean_std())
 
     def _compute_mean_std(self):
         """Compute the mean and standard deviation of the dataset, for normalization.
@@ -91,6 +91,7 @@ class CityScapesClientDataset(Dataset):
             im_lb = self.transform(im_lb)
 
         # Convert to Tensor With Normalization
-        image, label = self.to_tensor(im_lb)
+        out = self.to_tensor(im_lb)
 
+        image, label = out["im"], out["lb"]
         return image.detach(), label.unsqueeze(0).detach()
