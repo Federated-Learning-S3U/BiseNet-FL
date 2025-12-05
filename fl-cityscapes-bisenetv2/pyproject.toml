@@ -40,15 +40,22 @@ clientapp = "fl_cityscapes_bisenetv2.client_app:app"
 num-server-rounds = 3
 fraction-train = 0.5
 fraction-evaluate = 0.0
-server-device = "cpu"
+server-device = "cuda"
+
+# Server evaluation config
+eval-batch-size = 1
+eval-interval = 1
 
 # Client-side FL config
+client-device = "cuda"
+
 local-epochs = 1
 batch_size = 4
 
 # Dataset Paths
 im_root = "./datasets/cityscapes"
 client_data_partition = "./datasets/cityscapes/city_partitions.json"
+server_data_partition = "./datasets/cityscapes/val.txt"
 
 # Model Configs
 num_classes = 19
