@@ -127,3 +127,5 @@ log*txt
 tvm/
 
 /datasets/
+
+*.pt

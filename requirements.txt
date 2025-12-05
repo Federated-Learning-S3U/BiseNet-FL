@@ -1,6 +1,0 @@
-tqdm
-opencv-python
-tabulate
-torch
-torchvision
-flwr[simulation]

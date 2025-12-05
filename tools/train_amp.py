@@ -8,7 +8,6 @@ import os
 import os.path as osp
 import logging
 import json
-import argparse
 import numpy as np
 from tabulate import tabulate
 

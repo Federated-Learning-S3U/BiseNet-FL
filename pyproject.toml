@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "my_project_lib"
+version = "0.1.0"
+description = "Shared library for my fl-app"
+license = "Apache-2.0"
+
+# Dependencies for your Flower App
+dependencies = [
+    "flwr[simulation]>=1.23.0",
+    "flwr-datasets[vision]>=0.5.0",
+    "torch==2.7.1",
+    "torchvision==0.22.1",
+    "tqdm",
+    "opencv-python",
+    "tabulate"
+]
+
+
+[tool.setuptools]
+packages = ["lib"]
