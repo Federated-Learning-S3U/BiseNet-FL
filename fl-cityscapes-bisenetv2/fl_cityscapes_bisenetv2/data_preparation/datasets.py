@@ -79,7 +79,7 @@ def load_server_eval_data(
         batch_size=batch_size,
         shuffle=False,
         drop_last=False,
-        num_workers=4,
-        pin_memory=True,
+        num_workers=2,
+        pin_memory=False,
     )
     return evalloader

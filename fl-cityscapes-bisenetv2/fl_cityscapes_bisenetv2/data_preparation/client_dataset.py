@@ -35,6 +35,9 @@ class CityScapesClientDataset(Dataset):
         Returns:
             tuple: Mean and standard deviation for each channel (R, G, B).
         """
+        print("=" * 50)
+        print("Computing mean and std for dataset...")
+        print("=" * 50)
         pixel_sum = np.zeros(3, dtype=np.float64)
         pixel_sq_sum = np.zeros(3, dtype=np.float64)
         n_pixels = 0
@@ -42,7 +45,7 @@ class CityScapesClientDataset(Dataset):
         logger = logging.getLogger()
 
         logger.info("Computing mean and std for client dataset")
-        for path, _ in tqdm(self.data):
+        for path, _ in self.data:
             im = cv2.imread(os.path.join(self.data_root, path))
             if im is None:
                 continue

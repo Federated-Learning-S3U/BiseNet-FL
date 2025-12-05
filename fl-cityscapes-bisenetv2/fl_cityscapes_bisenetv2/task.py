@@ -14,15 +14,16 @@ from lib.ohem_ce_loss import OhemCELoss
 from tools.eval_metrics import compute_eval_metrics
 
 from fl_cityscapes_bisenetv2.data_preparation.datasets import load_server_eval_data
+from fl_cityscapes_bisenetv2.utils.model_utils import set_optimizer
 
 
-def train(net, trainloader, epochs, lr, device, num_aux_heads):
+def train(net, trainloader, epochs, lr, wd, device, num_aux_heads):
     """Train the model on the training set."""
     net.to(device)
     criterion_pre = OhemCELoss(0.7, device=device)
     criterion_aux = [OhemCELoss(0.7, device=device) for _ in range(num_aux_heads)]
 
-    optimizer = torch.optim.Adam(net.parameters(), lr=lr)  # TODO
+    optimizer = set_optimizer(net, lr_start=lr, weight_decay=wd)
 
     scaler = amp.GradScaler()
 
@@ -90,25 +91,36 @@ def train(net, trainloader, epochs, lr, device, num_aux_heads):
 def test(net, testloader, device):
     """Validate the model on the test set."""
 
+    net.to(device)
     org_aux = net.aux_mode
     net.aux_mode = "eval"
     net.eval()
 
+    criterion_pre = OhemCELoss(0.7, device=device)
+
     lb_ignore = 255  # TODO
 
     all_y_true, all_y_pred = [], []
+    total_loss = 0.0
+
     with torch.no_grad():
         for batch_idx, (im, lb) in enumerate(testloader):
             images = im.to(device)
-            labels = lb
+            labels = lb.to(device)
 
-            outputs = net(images)[0]
+            logits = net(images)[0]
+            loss = criterion_pre(logits, labels)
 
-            all_y_true.append(labels.flatten())
+            total_loss += loss.item()
 
-            preds = torch.argmax(outputs, dim=1).cpu().numpy()
-            all_y_pred.append(preds.flatten())
+            probs = torch.softmax(logits, dim=1)
 
+            preds = probs.argmax(dim=1)
+
+            all_y_true.append(labels.cpu().numpy().flatten())
+            all_y_pred.append(preds.cpu().numpy().flatten())
+
+    final_loss = total_loss / len(testloader)
     final_y_true = np.concatenate(all_y_true)
     final_y_pred = np.concatenate(all_y_pred)
 
@@ -121,15 +133,12 @@ def test(net, testloader, device):
 
     net.aux_mode = org_aux
 
-    return metrics  # TODO: Add Loss
+    return {**metrics, "loss": final_loss}
 
 
 def make_central_evaluate(context: Context):
     def central_evaluate(server_round: int, arrays: ArrayRecord) -> MetricRecord:
         """Evaluate the global model on the server side (optional)."""
-
-        if server_round == 0:
-            return MetricRecord({})
 
         # Read run config
         num_rounds: int = context.run_config["num-server-rounds"]
@@ -140,11 +149,7 @@ def make_central_evaluate(context: Context):
         eval_batch_size: int = context.run_config["eval-batch-size"]
         eval_interval: int = context.run_config["eval-interval"]
 
-        local_epochs: int = context.run_config["local-epochs"]
-        batch_size: int = context.run_config["batch_size"]
-
         im_root: str = context.run_config["im_root"]
-        client_data_partition: str = context.run_config["client_data_partition"]
         server_data_partition: str = context.run_config["server_data_partition"]
 
         num_classes: int = context.run_config["num_classes"]
@@ -159,18 +164,22 @@ def make_central_evaluate(context: Context):
 
         save_path: str = context.run_config["respth"]
 
-        # Load Global Model
-        model = BiSeNetV2(num_classes)
-        model.load_state_dict(arrays.to_torch_state_dict())
+        if server_round == 0 or server_round % eval_interval != 0:
+            return MetricRecord({})
 
         device = torch.device(server_device)
 
         print("=" * 50)
         print(f"Server evaluation using device: {device}")
         print("Server round {} / {}".format(server_round, num_rounds))
+        print(f"Evaluating global model on server-side dataset...")
+        print(f"Evaluation batch size: {eval_batch_size}")
         print("=" * 50)
 
-        model.to(device)
+        # Load Global Model
+        model = BiSeNetV2(num_classes).cpu()
+        sd = arrays.to_torch_state_dict()
+        model.load_state_dict(sd, strict=True)
 
         # Load the entire Cityscapes val dataset
         eval_loader = load_server_eval_data(
@@ -179,10 +188,33 @@ def make_central_evaluate(context: Context):
             batch_size=eval_batch_size,
         )
 
+        metrics = {}
         # Evaluate the model on the test set
-        metrics = test(model, eval_loader, device)
 
-        # Return the evaluation metrics
+        try:
+            model.to(device)
+
+            if device.type == "cuda":
+                print(torch.cuda.memory_summary(device=device, abbreviated=True))
+
+            metrics = test(model, eval_loader, device)
+
+        finally:
+            try:
+                model.cpu()
+            except Exception:
+                pass
+
+            del model
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+
+            if device.type == "cuda":
+                print(
+                    "After cleanup:",
+                    torch.cuda.memory_summary(device=device, abbreviated=True),
+                )
+
         return MetricRecord(metrics)
 
     return central_evaluate

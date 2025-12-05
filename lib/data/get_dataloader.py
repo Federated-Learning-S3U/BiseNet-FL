@@ -4,6 +4,7 @@ import torch.distributed as dist
 
 import lib.data.transform_cv2 as T
 from lib.data.sampler import RepeatedDistSampler
+from lib.data.cityscapes_cv2 import CityScapes
 
 
 def get_data_loader(cfg, mode="train"):

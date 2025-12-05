@@ -1,6 +1,7 @@
 """fl-cityscapes-bisenetv2: A Flower / PyTorch app."""
 
 import json
+import gc
 
 import torch
 from flwr.app import ArrayRecord, Context, Message, MetricRecord, RecordDict
@@ -59,18 +60,36 @@ def train(msg: Message, context: Context):
         trainloader,
         local_epochs,
         msg.content["config"]["lr"],
+        msg.content["config"]["weight_decay"],
         device,
         num_aux_heads,
     )
 
-    # Construct and return reply Message
-    model_record = ArrayRecord(model.state_dict())
+    model.cpu()
+    cpu_state_dict = {k: v.cpu() for k, v in model.state_dict().items()}
+
+    model_record = ArrayRecord(cpu_state_dict)
+
     metrics = {
         "train_loss": train_loss,
         "num-examples": len(trainloader.dataset),
     }
     metric_record = MetricRecord(metrics)
     content = RecordDict({"arrays": model_record, "metrics": metric_record})
+
+    try:
+        del model
+    except Exception:
+        pass
+    gc.collect()
+
+    try:
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+    except Exception:
+        pass
+
     return Message(content=content, reply_to=msg)
 
 
