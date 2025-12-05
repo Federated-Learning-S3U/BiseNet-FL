@@ -21,4 +21,4 @@ dependencies = [
 
 
 [tool.setuptools]
-packages = ["lib"]
+packages = ["lib", "tools"]
