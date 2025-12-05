@@ -18,13 +18,14 @@ class CityScapesClient(fl.client.NumPyClient):
     Inherits from Flower's NumPyClient to handle training on CityScapes data.
     """
 
-    def __init__(self, cfg, train_loader):
+    def __init__(self, cid, train_loader, cfg):
         """Initialize the CityScapes client.
 
         Args:
             cfg: Configuration object.
             train_loader (DataLoader): DataLoader for the training data.
         """
+        self.cid = cid
         self.cfg = cfg
         self.train_loader = train_loader
         self.model, self.criteria_pre, self.criteria_aux = self._init_local_model()
