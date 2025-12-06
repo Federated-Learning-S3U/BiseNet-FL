@@ -21,9 +21,6 @@ def train(msg: Message, context: Context):
     """Train the model on local data."""
 
     # Read run config
-    num_rounds: int = context.run_config["num-server-rounds"]
-    fraction_train: float = context.run_config["fraction-train"]
-
     local_epochs: int = context.run_config["local-epochs"]
     batch_size: int = context.run_config["batch_size"]
 
@@ -31,9 +28,6 @@ def train(msg: Message, context: Context):
     client_data_partition: str = context.run_config["client_data_partition"]
 
     num_classes: int = context.run_config["num_classes"]
-
-    lr: float = context.run_config["lr"]
-    weight_decay: float = context.run_config["weight_decay"]
 
     num_aux_heads: int = context.run_config["num_aux_heads"]
 

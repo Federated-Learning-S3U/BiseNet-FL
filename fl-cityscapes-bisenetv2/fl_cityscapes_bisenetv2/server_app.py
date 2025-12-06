@@ -1,7 +1,5 @@
 """fl-cityscapes-bisenetv2: A Flower / PyTorch app."""
 
-import json
-
 import torch
 from flwr.app import ArrayRecord, ConfigRecord, Context
 from flwr.serverapp import Grid, ServerApp

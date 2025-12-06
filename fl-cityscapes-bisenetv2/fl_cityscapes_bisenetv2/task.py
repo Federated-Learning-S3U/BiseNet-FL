@@ -1,6 +1,5 @@
 """fl-cityscapes-bisenetv2: A Flower / PyTorch app."""
 
-import json
 import numpy as np
 
 import torch
@@ -200,12 +199,12 @@ def make_central_evaluate(context: Context):
         miou = metrics.get("mIoU", 0.0)
 
         if miou > best_miou["value"]:
-            best_miou["value"] = miou
             torch.save(state_dict, save_best)
             print(
                 f"[Server] 🎉 New best mIoU {miou:.4f} "
                 f"(previous {best_miou['value']:.4f}) — saved model."
             )
+            best_miou["value"] = miou
         else:
             print(
                 f"[Server] Eval Round {server_round}: mIoU {miou:.4f} "

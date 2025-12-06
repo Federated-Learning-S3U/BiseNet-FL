@@ -43,7 +43,7 @@ fraction-evaluate = 0.0
 server-device = "cuda"
 
 # Server Loading Config
-resume = false
+resume = true
 pretrained_path = "./res/latest_model.pt"
 
 # Server evaluation config
