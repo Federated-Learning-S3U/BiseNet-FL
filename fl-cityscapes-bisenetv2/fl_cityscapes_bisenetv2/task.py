@@ -1,5 +1,6 @@
 """fl-cityscapes-bisenetv2: A Flower / PyTorch app."""
 
+import json
 import numpy as np
 
 import torch
@@ -139,10 +140,13 @@ def make_central_evaluate(context: Context):
     """Create a central evaluation function that accepts context as an argument."""
 
     # This best_miou is only set once and retains its value across multiple calls to central_evaluate
-    best_miou = {"value": 0.0}
+    best_miou = context.run_config["best_miou"]
+    best_miou = {"value": best_miou}
 
     save_latest = context.run_config["save_latest"]
     save_best = context.run_config["save_best"]
+    best_metric_file = context.run_config["best_metric"]
+    latest_metric_file = context.run_config["latest_metric"]
 
     def central_evaluate(server_round: int, arrays: ArrayRecord) -> MetricRecord:
         """Evaluate the global model on the server side (optional)."""
@@ -158,7 +162,9 @@ def make_central_evaluate(context: Context):
 
         num_classes: int = context.run_config["num_classes"]
 
-        if server_round % eval_interval != 0:
+        rounds_trained = context.run_config["rounds_trained"]
+
+        if server_round == 0 or server_round % eval_interval != 0:
             return MetricRecord({})
 
         device = torch.device(server_device)
@@ -176,8 +182,8 @@ def make_central_evaluate(context: Context):
         )
 
         metrics = {}
-        # Evaluate the model on the test set
 
+        # Evaluate the model on the test set
         try:
             model.to(device)
             metrics = test(model, eval_loader, device, num_classes)
@@ -195,20 +201,33 @@ def make_central_evaluate(context: Context):
         state_dict = arrays.to_torch_state_dict()
 
         torch.save(state_dict, save_latest)
+        with open(latest_metric_file, "w") as f:
+            json.dump(
+                {"mIoU": metrics["mIoU"], "round": rounds_trained + server_round},
+                f,
+                indent=4,
+            )
+        print(
+            f"[Server] Eval Round {rounds_trained + server_round}: Saved latest model and updated {latest_metric_file} "
+            f"(best {best_miou['value']:.4f})"
+        )
 
         miou = metrics.get("mIoU", 0.0)
 
         if miou > best_miou["value"]:
             torch.save(state_dict, save_best)
-            print(
-                f"[Server] 🎉 New best mIoU {miou:.4f} "
-                f"(previous {best_miou['value']:.4f}) — saved model."
-            )
+            print(f"[Server] 🎉 New best mIoU {miou:.4f} ")
             best_miou["value"] = miou
-        else:
+
+            with open(best_metric_file, "w") as f:
+                json.dump(
+                    {"best_miou": miou, "round": rounds_trained + server_round},
+                    f,
+                    indent=4,
+                )
+
             print(
-                f"[Server] Eval Round {server_round}: mIoU {miou:.4f} "
-                f"(best {best_miou['value']:.4f})"
+                f"[Server] New best mIoU {miou:.4f}, saved model and updated {best_metric_file}"
             )
 
         return MetricRecord(metrics)

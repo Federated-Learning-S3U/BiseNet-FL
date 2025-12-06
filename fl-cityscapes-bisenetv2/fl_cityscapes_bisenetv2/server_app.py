@@ -3,7 +3,8 @@
 import torch
 from flwr.app import ArrayRecord, ConfigRecord, Context
 from flwr.serverapp import Grid, ServerApp
-from flwr.serverapp.strategy import FedAvg
+
+from flwr.serverapp.strategy import FedAvg, FedAvgM, FedProx
 
 from lib.models import BiSeNetV2
 
@@ -25,9 +26,12 @@ def main(grid: Grid, context: Context) -> None:
 
     resume = context.run_config["resume"]
     pretrained_path = context.run_config["pretrained_path"]
+    rounds_trained = context.run_config["rounds_trained"]
 
     lr: float = context.run_config["lr"]
     weight_decay: float = context.run_config["weight_decay"]
+
+    strategy_name: str = context.run_config["strategy_name"]
 
     # Load global model
     global_model = BiSeNetV2(num_classes)
@@ -36,8 +40,10 @@ def main(grid: Grid, context: Context) -> None:
         print(f"[Server] Resuming from pretrained model at {pretrained_path}")
         sd = torch.load(pretrained_path, map_location="cpu")
         global_model.load_state_dict(sd, strict=True)
+        print(f"[Server] Pretrained model trained on {rounds_trained} rounds.")
     else:
         print(f"[Server] Starting from random initialized model.")
+        print(f"[Server] Initial model trained on {rounds_trained} rounds.")
 
     arrays = ArrayRecord(global_model.state_dict())
 
@@ -45,7 +51,7 @@ def main(grid: Grid, context: Context) -> None:
     evaluate_fn = make_central_evaluate(context)
 
     # Initialize FedAvg strategy
-    strategy = FedAvg(fraction_train=fraction_train, fraction_evaluate=0.0)
+    strategy = eval(strategy_name)(fraction_train=fraction_train, fraction_evaluate=0.0)
 
     # Start strategy, run FedAvg for `num_rounds`
     result = strategy.start(
