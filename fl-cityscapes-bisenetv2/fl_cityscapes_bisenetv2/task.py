@@ -11,7 +11,7 @@ from flwr.app import ArrayRecord, MetricRecord, Context
 
 from lib.models import BiSeNetV2
 from lib.ohem_ce_loss import OhemCELoss
-from tools.eval_metrics import compute_eval_metrics
+from tools.eval_metrics import compute_metrics_from_cm
 
 from fl_cityscapes_bisenetv2.data_preparation.datasets import load_server_eval_data
 from fl_cityscapes_bisenetv2.utils.model_utils import set_optimizer
@@ -88,7 +88,7 @@ def train(net, trainloader, epochs, lr, wd, device, num_aux_heads):
     return avg_trainloss
 
 
-def test(net, testloader, device):
+def test(net, testloader, device, num_classes):
     """Validate the model on the test set."""
 
     net.to(device)
@@ -97,10 +97,9 @@ def test(net, testloader, device):
     net.eval()
 
     criterion_pre = OhemCELoss(0.7, device=device)
-
     lb_ignore = 255  # TODO
 
-    all_y_true, all_y_pred = [], []
+    conf_matrix = np.zeros((num_classes, num_classes), dtype=np.int64)
     total_loss = 0.0
 
     with torch.no_grad():
@@ -110,26 +109,27 @@ def test(net, testloader, device):
 
             logits = net(images)[0]
             loss = criterion_pre(logits, labels)
-
             total_loss += loss.item()
 
-            probs = torch.softmax(logits, dim=1)
+            preds = torch.softmax(logits, dim=1).argmax(dim=1)
 
-            preds = probs.argmax(dim=1)
+            preds_np = preds.cpu().numpy().reshape(-1)
+            labels_np = labels.cpu().numpy().reshape(-1)
 
-            all_y_true.append(labels.cpu().numpy().flatten())
-            all_y_pred.append(preds.cpu().numpy().flatten())
+            mask = labels_np != lb_ignore
+            preds_np = preds_np[mask]
+            labels_np = labels_np[mask]
+
+            conf_matrix += np.bincount(
+                labels_np * num_classes + preds_np,
+                minlength=num_classes**2,
+            ).reshape(num_classes, num_classes)
+
+    print("Finished evaluation on test set.")
 
     final_loss = total_loss / len(testloader)
-    final_y_true = np.concatenate(all_y_true)
-    final_y_pred = np.concatenate(all_y_pred)
 
-    metrics = compute_eval_metrics(
-        y_true=final_y_true,
-        y_pred=final_y_pred,
-        num_classes=net.num_classes,
-        ignore_index=lb_ignore,
-    )
+    metrics = compute_metrics_from_cm(conf_matrix)
 
     net.aux_mode = org_aux
 
@@ -197,7 +197,7 @@ def make_central_evaluate(context: Context):
             if device.type == "cuda":
                 print(torch.cuda.memory_summary(device=device, abbreviated=True))
 
-            metrics = test(model, eval_loader, device)
+            metrics = test(model, eval_loader, device, num_classes)
 
         finally:
             try:
