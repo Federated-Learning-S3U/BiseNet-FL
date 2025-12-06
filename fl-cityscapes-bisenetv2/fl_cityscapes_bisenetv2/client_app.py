@@ -40,8 +40,6 @@ def train(msg: Message, context: Context):
     scales: list = json.loads(context.run_config["scales"])
     cropsize: list = json.loads(context.run_config["cropsize"])
 
-    save_path: str = context.run_config["respth"]
-
     # Load the model and initialize it with the received weights
     model = BiSeNetV2(num_classes)
     model.load_state_dict(msg.content["arrays"].to_torch_state_dict())
