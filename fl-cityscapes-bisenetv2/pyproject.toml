@@ -42,6 +42,10 @@ fraction-train = 0.5
 fraction-evaluate = 0.0
 server-device = "cuda"
 
+# Server Loading Config
+resume = false
+pretrained_path = "./res/latest_model.pt"
+
 # Server evaluation config
 eval-batch-size = 1
 eval-interval = 1
@@ -69,7 +73,8 @@ scales = "[0.25, 2.0]"
 cropsize = "[512, 1024]"
 
 # Results path
-respth = "./final_model.pt"
+save_latest = "./res/latest_model.pt"
+save_best = "./res/best_model.pt"
 
 # Default federation to use when running the app
 [tool.flwr.federations]

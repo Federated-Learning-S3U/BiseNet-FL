@@ -133,17 +133,22 @@ def test(net, testloader, device, num_classes):
 
     net.aux_mode = org_aux
 
-    return {**metrics, "loss": final_loss}
+    return {**metrics, "val_loss": final_loss}
 
 
 def make_central_evaluate(context: Context):
+    """Create a central evaluation function that accepts context as an argument."""
+
+    # This best_miou is only set once and retains its value across multiple calls to central_evaluate
+    best_miou = {"value": 0.0}
+
+    save_latest = context.run_config["save_latest"]
+    save_best = context.run_config["save_best"]
+
     def central_evaluate(server_round: int, arrays: ArrayRecord) -> MetricRecord:
         """Evaluate the global model on the server side (optional)."""
 
         # Read run config
-        num_rounds: int = context.run_config["num-server-rounds"]
-        fraction_train: float = context.run_config["fraction-train"]
-
         server_device: str = context.run_config["server-device"]
 
         eval_batch_size: int = context.run_config["eval-batch-size"]
@@ -154,27 +159,10 @@ def make_central_evaluate(context: Context):
 
         num_classes: int = context.run_config["num_classes"]
 
-        lr: float = context.run_config["lr"]
-        weight_decay: float = context.run_config["weight_decay"]
-
-        num_aux_heads: int = context.run_config["num_aux_heads"]
-
-        scales: list = json.loads(context.run_config["scales"])
-        cropsize: list = json.loads(context.run_config["cropsize"])
-
-        save_path: str = context.run_config["respth"]
-
-        if server_round == 0 or server_round % eval_interval != 0:
+        if server_round % eval_interval != 0:
             return MetricRecord({})
 
         device = torch.device(server_device)
-
-        print("=" * 50)
-        print(f"Server evaluation using device: {device}")
-        print("Server round {} / {}".format(server_round, num_rounds))
-        print(f"Evaluating global model on server-side dataset...")
-        print(f"Evaluation batch size: {eval_batch_size}")
-        print("=" * 50)
 
         # Load Global Model
         model = BiSeNetV2(num_classes).cpu()
@@ -193,10 +181,6 @@ def make_central_evaluate(context: Context):
 
         try:
             model.to(device)
-
-            if device.type == "cuda":
-                print(torch.cuda.memory_summary(device=device, abbreviated=True))
-
             metrics = test(model, eval_loader, device, num_classes)
 
         finally:
@@ -209,11 +193,24 @@ def make_central_evaluate(context: Context):
             torch.cuda.empty_cache()
             torch.cuda.synchronize()
 
-            if device.type == "cuda":
-                print(
-                    "After cleanup:",
-                    torch.cuda.memory_summary(device=device, abbreviated=True),
-                )
+        state_dict = arrays.to_torch_state_dict()
+
+        torch.save(state_dict, save_latest)
+
+        miou = metrics.get("mIoU", 0.0)
+
+        if miou > best_miou["value"]:
+            best_miou["value"] = miou
+            torch.save(state_dict, save_best)
+            print(
+                f"[Server] 🎉 New best mIoU {miou:.4f} "
+                f"(previous {best_miou['value']:.4f}) — saved model."
+            )
+        else:
+            print(
+                f"[Server] Eval Round {server_round}: mIoU {miou:.4f} "
+                f"(best {best_miou['value']:.4f})"
+            )
 
         return MetricRecord(metrics)
 
