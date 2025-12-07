@@ -82,7 +82,7 @@ cropsize = "[512, 1024]"
 # Results path
 save-latest = "./res/latest_model.pt"
 save-best = "./res/best_model.pt"
-server-results-file = "./res/server_results.json"
+server-results-file = "./res/server_results.txt"
 
 best-miou = 0.0 # IMPORTANT Need Update on Resume
 best-metric = "./res/best_metric.json"

@@ -82,4 +82,4 @@ def main(grid: Grid, context: Context) -> None:
     )
 
     with open(context.run_config["server-results-file"], "w") as f:
-        json.dump(results, f, indent=4)
+        f.write(str(results))
