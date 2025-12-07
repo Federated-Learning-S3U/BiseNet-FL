@@ -22,16 +22,16 @@ def train(msg: Message, context: Context):
 
     # Read run config
     local_epochs: int = context.run_config["local-epochs"]
-    batch_size: int = context.run_config["batch_size"]
+    batch_size: int = context.run_config["batch-size"]
 
-    weight_decay: float = context.run_config["weight_decay"]
+    weight_decay: float = context.run_config["weight-decay"]
 
-    im_root: str = context.run_config["im_root"]
-    client_data_partition: str = context.run_config["client_data_partition"]
+    im_root: str = context.run_config["im-root"]
+    client_data_partition: str = context.run_config["client-data-partition"]
 
-    num_classes: int = context.run_config["num_classes"]
+    num_classes: int = context.run_config["num-classes"]
 
-    num_aux_heads: int = context.run_config["num_aux_heads"]
+    num_aux_heads: int = context.run_config["num-aux-heads"]
 
     scales: list = json.loads(context.run_config["scales"])
     cropsize: list = json.loads(context.run_config["cropsize"])
@@ -99,17 +99,17 @@ def train(msg: Message, context: Context):
 #     fraction_train: float = context.run_config["fraction-train"]
 
 #     local_epochs: int = context.run_config["local-epochs"]
-#     batch_size: int = context.run_config["batch_size"]
+#     batch_size: int = context.run_config["batch-size"]
 
-#     im_root: str = context.run_config["im_root"]
-#     client_data_partition: str = context.run_config["client_data_partition"]
+#     im_root: str = context.run_config["im-root"]
+#     client_data_partition: str = context.run_config["client-data-partition"]
 
-#     num_classes: int = context.run_config["num_classes"]
+#     num_classes: int = context.run_config["num-classes"]
 
 #     lr: float = context.run_config["lr"]
-#     weight_decay: float = context.run_config["weight_decay"]
+#     weight_decay: float = context.run_config["weight-decay"]
 
-#     num_aux_heads: int = context.run_config["num_aux_heads"]
+#     num_aux_heads: int = context.run_config["num-aux-heads"]
 
 #     scales: list = context.run_config["scales"]
 #     cropsize: list = context.run_config["cropsize"]

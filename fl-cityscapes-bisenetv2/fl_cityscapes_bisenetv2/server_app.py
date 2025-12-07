@@ -25,18 +25,18 @@ def main(grid: Grid, context: Context) -> None:
     num_rounds: int = context.run_config["num-server-rounds"]
     fraction_train: float = context.run_config["fraction-train"]
 
-    num_classes: int = context.run_config["num_classes"]
+    num_classes: int = context.run_config["num-classes"]
 
     resume = context.run_config["resume"]
-    pretrained_path = context.run_config["pretrained_path"]
-    rounds_trained = context.run_config["rounds_trained"]
+    pretrained_path = context.run_config["pretrained-path"]
+    rounds_trained = context.run_config["rounds-trained"]
 
     lr: float = context.run_config["lr"]
-    lr_decay_factor: float = context.run_config["lr_decay_factor"]
-    lr_decay_rounds: int = context.run_config["lr_decay_rounds"]
-    lr_schedule_file: str = context.run_config["lr_schedule_file"]
+    lr_decay_factor: float = context.run_config["lr-decay-factor"]
+    lr_decay_rounds: int = context.run_config["lr-decay-rounds"]
+    lr_schedule_file: str = context.run_config["lr-schedule-file"]
 
-    strategy_name: str = context.run_config["strategy_name"]
+    strategy_name: str = context.run_config["strategy-name"]
 
     # Load global model
     global_model = BiSeNetV2(num_classes)

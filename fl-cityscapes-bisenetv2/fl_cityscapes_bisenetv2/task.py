@@ -107,17 +107,16 @@ def make_central_evaluate(context: Context):
     """Create a central evaluation function that accepts context as an argument."""
 
     # This best_miou is only set once and retains its value across multiple calls to central_evaluate
-    best_miou = context.run_config["best_miou"]
+    best_miou = context.run_config["best-miou"]
     best_miou = {"value": best_miou}
 
-    save_latest = context.run_config["save_latest"]
-    save_best = context.run_config["save_best"]
-    best_metric_file = context.run_config["best_metric"]
-    latest_metric_file = context.run_config["latest_metric"]
+    save_latest = context.run_config["save-latest"]
+    save_best = context.run_config["save-best"]
+    best_metric_file = context.run_config["best-metric"]
+    latest_metric_file = context.run_config["latest-metric"]
+    client_data_file = context.run_config["client-data-file"]
 
-    data_mean, data_std = aggregate_client_metrics(
-        context.run_config["client_data_file"]
-    )
+    data_mean, data_std = aggregate_client_metrics(client_data_file)
     data_metrics = {"mean": data_mean, "std": data_std}
 
     def central_evaluate(server_round: int, arrays: ArrayRecord) -> MetricRecord:
@@ -129,13 +128,13 @@ def make_central_evaluate(context: Context):
         eval_batch_size: int = context.run_config["eval-batch-size"]
         eval_interval: int = context.run_config["eval-interval"]
 
-        im_root: str = context.run_config["im_root"]
-        server_data_partition: str = context.run_config["server_data_partition"]
+        im_root: str = context.run_config["im-root"]
+        server_data_partition: str = context.run_config["server-data-partition"]
 
-        num_classes: int = context.run_config["num_classes"]
-        lb_ignore: int = context.run_config["lb_ignore"]
+        num_classes: int = context.run_config["num-classes"]
+        lb_ignore: int = context.run_config["lb-ignore"]
 
-        rounds_trained = context.run_config["rounds_trained"]
+        rounds_trained = context.run_config["rounds-trained"]
 
         if server_round == 0 or server_round % eval_interval != 0:
             return MetricRecord({})
