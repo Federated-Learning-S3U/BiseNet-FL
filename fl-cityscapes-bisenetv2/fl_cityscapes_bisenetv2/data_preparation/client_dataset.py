@@ -5,7 +5,6 @@ import os
 
 import numpy as np
 import cv2
-from tqdm import tqdm
 from torch.utils.data import Dataset
 import lib.data.transform_cv2 as T
 
@@ -16,7 +15,7 @@ class CityScapesClientDataset(Dataset):
     Inherits from PyTorch Dataset class to handle CityScapes data for a specific client.
     """
 
-    def __init__(self, data_root, data, transform=None):
+    def __init__(self, data_root, data, metrics, transform=None):
         """CityScapes Client Dataset Initialization
 
         Args:
@@ -26,38 +25,9 @@ class CityScapesClientDataset(Dataset):
         """
         self.data_root = data_root
         self.data = data
+        self.metrics = metrics
         self.transform = transform
-        self.to_tensor = T.ToTensor(*self._compute_mean_std())
-
-    def _compute_mean_std(self):
-        """Compute the mean and standard deviation of the dataset, for normalization.
-
-        Returns:
-            tuple: Mean and standard deviation for each channel (R, G, B).
-        """
-        pixel_sum = np.zeros(3, dtype=np.float64)
-        pixel_sq_sum = np.zeros(3, dtype=np.float64)
-        n_pixels = 0
-
-        logger = logging.getLogger()
-
-        logger.info("Computing mean and std for client dataset")
-        for path, _ in self.data:
-            im = cv2.imread(os.path.join(self.data_root, path))
-            if im is None:
-                continue
-
-            im = im[:, :, ::-1].astype(np.float32) / 255.0
-
-            n_pixels += im.shape[0] * im.shape[1]
-            pixel_sum += im.sum(axis=(0, 1))
-            pixel_sq_sum += (im**2).sum(axis=(0, 1))
-
-        rgb_mean = pixel_sum / n_pixels
-
-        rgb_std = np.sqrt((pixel_sq_sum / n_pixels) - (rgb_mean**2))
-
-        return rgb_mean.tolist(), rgb_std.tolist()
+        self.to_tensor = T.ToTensor(mean=metrics["mean"], std=metrics["std"])
 
     def __len__(self):
         return len(self.data)

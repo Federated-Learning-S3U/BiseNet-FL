@@ -44,7 +44,7 @@ def train(msg: Message, context: Context):
 
     # Load the data
     partition_id = context.node_config["partition-id"]
-    print(f"[Client {partition_id}] Loading data partition.")
+
     trainloader = load_client_train_data(
         im_root, client_data_partition, partition_id, batch_size, scales, cropsize
     )
@@ -73,6 +73,7 @@ def train(msg: Message, context: Context):
     metric_record = MetricRecord(metrics)
     content = RecordDict({"arrays": model_record, "metrics": metric_record})
     print(f"[Client {partition_id}] Training completed.")
+
     try:
         del model
     except Exception:

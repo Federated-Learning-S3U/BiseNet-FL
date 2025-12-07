@@ -32,6 +32,9 @@ def main(grid: Grid, context: Context) -> None:
     rounds_trained = context.run_config["rounds_trained"]
 
     lr: float = context.run_config["lr"]
+    lr_decay_factor: float = context.run_config["lr_decay_factor"]
+    lr_decay_rounds: int = context.run_config["lr_decay_rounds"]
+    lr_schedule_file: str = context.run_config["lr_schedule_file"]
 
     strategy_name: str = context.run_config["strategy_name"]
 
@@ -57,7 +60,11 @@ def main(grid: Grid, context: Context) -> None:
     # Initialize Custom strategy
     custom_strategy_name = "Custom" + strategy_name
     strategy = eval(custom_strategy_name)(
-        fraction_train=fraction_train, fraction_evaluate=0.0
+        fraction_train=fraction_train,
+        fraction_evaluate=0.0,
+        lr_schedule_file=lr_schedule_file,
+        lr_decay_factor=lr_decay_factor,
+        lr_decay_rounds=lr_decay_rounds,
     )
 
     # Start strategy

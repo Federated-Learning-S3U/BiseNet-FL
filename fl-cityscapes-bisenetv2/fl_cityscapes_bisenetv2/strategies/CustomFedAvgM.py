@@ -1,11 +1,24 @@
 import json
 from typing import Iterable
+
 from flwr.serverapp import Grid
 from flwr.serverapp.strategy import FedAvgM
 from flwr.app import ArrayRecord, ConfigRecord, Message
 
 
 class CustomFedAvgM(FedAvgM):
+    def __init__(
+        self,
+        lr_decay_factor: float = 0.9,
+        lr_decay_rounds: int = 5,
+        lr_schedule_file: str = "./res/lr_schedule.json",
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.lr_decay_factor = lr_decay_factor
+        self.lr_decay_rounds = lr_decay_rounds
+        self.lr_schedule_file = lr_schedule_file
+
     def configure_train(
         self, server_round: int, arrays: ArrayRecord, config: ConfigRecord, grid: Grid
     ) -> Iterable[Message]:

@@ -65,8 +65,12 @@ server_data_partition = "./datasets/cityscapes/val.txt"
 
 # Model Configs
 num_classes = 19
+lb_ignore = 255
 
 lr = 5e-3 # IMPORTANT Need Update on Resume
+lr_decay_factor = 0.9
+lr_decay_rounds = 5
+lr_schedule_file = "./res/lr_schedule.json"
 
 weight_decay = 5e-4
 

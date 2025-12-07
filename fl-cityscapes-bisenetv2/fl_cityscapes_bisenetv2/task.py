@@ -15,6 +15,7 @@ from tools.eval_metrics import compute_metrics_from_cm
 
 from fl_cityscapes_bisenetv2.data_preparation.datasets import load_server_eval_data
 from fl_cityscapes_bisenetv2.utils.model_utils import set_optimizer
+from fl_cityscapes_bisenetv2.data_preparation.utils import aggregate_client_metrics
 
 
 def train(net, trainloader, epochs, lr, wd, device, num_aux_heads):
@@ -30,7 +31,7 @@ def train(net, trainloader, epochs, lr, wd, device, num_aux_heads):
     net.train()
     running_loss = 0.0
     for _ in range(epochs):
-        for it, (im, lb) in enumerate(trainloader):
+        for im, lb in trainloader:
             images = im.to(device)
             labels = lb.to(device)
 
@@ -48,29 +49,6 @@ def train(net, trainloader, epochs, lr, wd, device, num_aux_heads):
             scaler.step(optimizer)
             scaler.update()
 
-            # lr_scheduler.step()
-
-            # self.time_meter.update() # TODO: Add Local Model Loggers
-            # self.loss_meter.update(loss.item())
-            # self.loss_pre_meter.update(loss_pre.item())
-            # _ = [
-            #     mter.update(lss.item())
-            #     for mter, lss in zip(self.loss_aux_meters, loss_aux)
-            # ]
-
-            # if (it + 1) % 100 == 0:
-            #     lr = lr_scheduler.get_lr()
-            #     lr = sum(lr) / len(lr)
-            #     msg = log_msg(
-            #         it,
-            #         self.cfg.max_iter,
-            #         lr,
-            #         self.time_meter,
-            #         self.loss_meter,
-            #         self.loss_pre_meter,
-            #         self.loss_aux_meters,
-            #     )
-            #     logger.info(msg)
             running_loss += loss.item()
 
     avg_trainloss = running_loss / len(trainloader)
@@ -78,7 +56,7 @@ def train(net, trainloader, epochs, lr, wd, device, num_aux_heads):
     return avg_trainloss
 
 
-def test(net, testloader, device, num_classes):
+def test(net, testloader, device, num_classes, lb_ignore=255):
     """Validate the model on the test set."""
 
     net.to(device)
@@ -87,13 +65,12 @@ def test(net, testloader, device, num_classes):
     net.eval()
 
     criterion_pre = OhemCELoss(0.7, device=device)
-    lb_ignore = 255  # TODO
 
     conf_matrix = np.zeros((num_classes, num_classes), dtype=np.int64)
     total_loss = 0.0
 
     with torch.no_grad():
-        for batch_idx, (im, lb) in enumerate(testloader):
+        for im, lb in testloader:
             images = im.to(device)
             labels = lb.to(device)
 
@@ -138,6 +115,11 @@ def make_central_evaluate(context: Context):
     best_metric_file = context.run_config["best_metric"]
     latest_metric_file = context.run_config["latest_metric"]
 
+    data_mean, data_std = aggregate_client_metrics(
+        context.run_config["client_data_file"]
+    )
+    data_metrics = {"mean": data_mean, "std": data_std}
+
     def central_evaluate(server_round: int, arrays: ArrayRecord) -> MetricRecord:
         """Evaluate the global model on the server side (optional)."""
 
@@ -151,6 +133,7 @@ def make_central_evaluate(context: Context):
         server_data_partition: str = context.run_config["server_data_partition"]
 
         num_classes: int = context.run_config["num_classes"]
+        lb_ignore: int = context.run_config["lb_ignore"]
 
         rounds_trained = context.run_config["rounds_trained"]
 
@@ -168,6 +151,7 @@ def make_central_evaluate(context: Context):
         eval_loader = load_server_eval_data(
             data_root=im_root,
             data_file=server_data_partition,
+            normalization_metrics=data_metrics,
             batch_size=eval_batch_size,
         )
 
@@ -176,7 +160,7 @@ def make_central_evaluate(context: Context):
         # Evaluate the model on the test set
         try:
             model.to(device)
-            metrics = test(model, eval_loader, device, num_classes)
+            metrics = test(model, eval_loader, device, num_classes, lb_ignore)
 
         finally:
             try:
