@@ -2,6 +2,18 @@
     "0": {
         "client_name": "aachen",
         "num_samples": 174,
+        "data_metrics": {
+            "mean": [
+                0.22491333539458527,
+                0.2655626603926735,
+                0.22594310865662565
+            ],
+            "std": [
+                0.13463736298783782,
+                0.14482685541495602,
+                0.13983768394056476
+            ]
+        },
         "data": [
             [
                 "leftImg8bit/train/aachen/aachen_000000_000019_leftImg8bit.png",
@@ -704,6 +716,18 @@
     "1": {
         "client_name": "bochum",
         "num_samples": 96,
+        "data_metrics": {
+            "mean": [
+                0.28185403424625594,
+                0.31880931137129664,
+                0.271516559800754
+            ],
+            "std": [
+                0.16276039890811575,
+                0.1647192872527024,
+                0.16069145770290355
+            ]
+        },
         "data": [
             [
                 "leftImg8bit/train/bochum/bochum_000000_000313_leftImg8bit.png",
@@ -1094,6 +1118,18 @@
     "2": {
         "client_name": "bremen",
         "num_samples": 316,
+        "data_metrics": {
+            "mean": [
+                0.27237843486327157,
+                0.3148906622317773,
+                0.26900099892216395
+            ],
+            "std": [
+                0.17210125630307732,
+                0.17972357087266713,
+                0.17847255310934837
+            ]
+        },
         "data": [
             [
                 "leftImg8bit/train/bremen/bremen_000000_000019_leftImg8bit.png",
@@ -2364,6 +2400,18 @@
     "3": {
         "client_name": "cologne",
         "num_samples": 154,
+        "data_metrics": {
+            "mean": [
+                0.27771923352371564,
+                0.3217001191594384,
+                0.284771267566588
+            ],
+            "std": [
+                0.1864360020192988,
+                0.1906990294758822,
+                0.18784452435979612
+            ]
+        },
         "data": [
             [
                 "leftImg8bit/train/cologne/cologne_000000_000019_leftImg8bit.png",
@@ -2986,6 +3034,18 @@
     "4": {
         "client_name": "darmstadt",
         "num_samples": 85,
+        "data_metrics": {
+            "mean": [
+                0.2526568582829307,
+                0.30614100063548366,
+                0.2925064732046688
+            ],
+            "std": [
+                0.22432260251235392,
+                0.23032980610080928,
+                0.22683256464130805
+            ]
+        },
         "data": [
             [
                 "leftImg8bit/train/darmstadt/darmstadt_000000_000019_leftImg8bit.png",
@@ -3332,6 +3392,18 @@
     "5": {
         "client_name": "dusseldorf",
         "num_samples": 221,
+        "data_metrics": {
+            "mean": [
+                0.2134557437168527,
+                0.2575694067041259,
+                0.22147409220087041
+            ],
+            "std": [
+                0.13783284954044156,
+                0.1491590399650916,
+                0.14309517932952392
+            ]
+        },
         "data": [
             [
                 "leftImg8bit/train/dusseldorf/dusseldorf_000000_000019_leftImg8bit.png",
@@ -4222,6 +4294,18 @@
     "6": {
         "client_name": "erfurt",
         "num_samples": 109,
+        "data_metrics": {
+            "mean": [
+                0.2304240042736771,
+                0.2700444747001753,
+                0.22868688937720902
+            ],
+            "std": [
+                0.13578741568645364,
+                0.14711707069446892,
+                0.14105398357492802
+            ]
+        },
         "data": [
             [
                 "leftImg8bit/train/erfurt/erfurt_000000_000019_leftImg8bit.png",
@@ -4664,6 +4748,18 @@
     "7": {
         "client_name": "hamburg",
         "num_samples": 248,
+        "data_metrics": {
+            "mean": [
+                0.33254834204431505,
+                0.36175720069196915,
+                0.31869886352890925
+            ],
+            "std": [
+                0.18749950870725315,
+                0.19071242891030615,
+                0.1891850493928404
+            ]
+        },
         "data": [
             [
                 "leftImg8bit/train/hamburg/hamburg_000000_000042_leftImg8bit.png",
@@ -5662,6 +5758,18 @@
     "8": {
         "client_name": "hanover",
         "num_samples": 196,
+        "data_metrics": {
+            "mean": [
+                0.3168230064365329,
+                0.3531578190776767,
+                0.3160056988043444
+            ],
+            "std": [
+                0.19005033096948004,
+                0.18988396334704413,
+                0.18860354176484956
+            ]
+        },
         "data": [
             [
                 "leftImg8bit/train/hanover/hanover_000000_000164_leftImg8bit.png",
@@ -6452,6 +6560,18 @@
     "9": {
         "client_name": "jena",
         "num_samples": 119,
+        "data_metrics": {
+            "mean": [
+                0.26482981956806506,
+                0.3095188010640505,
+                0.2671353816986084
+            ],
+            "std": [
+                0.16417541572930774,
+                0.16999784796114623,
+                0.168583261545371
+            ]
+        },
         "data": [
             [
                 "leftImg8bit/train/jena/jena_000000_000019_leftImg8bit.png",
@@ -6934,6 +7054,18 @@
     "10": {
         "client_name": "krefeld",
         "num_samples": 99,
+        "data_metrics": {
+            "mean": [
+                0.32125410889134265,
+                0.34987142832592283,
+                0.3055199020438724
+            ],
+            "std": [
+                0.1970361743993904,
+                0.197350947050024,
+                0.19661790008079255
+            ]
+        },
         "data": [
             [
                 "leftImg8bit/train/krefeld/krefeld_000000_000108_leftImg8bit.png",
@@ -7336,6 +7468,18 @@
     "11": {
         "client_name": "monchengladbach",
         "num_samples": 94,
+        "data_metrics": {
+            "mean": [
+                0.3262350689223472,
+                0.35633026190260625,
+                0.31438690233737865
+            ],
+            "std": [
+                0.20025212430166234,
+                0.20199809050772313,
+                0.2027889014350028
+            ]
+        },
         "data": [
             [
                 "leftImg8bit/train/monchengladbach/monchengladbach_000000_000076_leftImg8bit.png",
@@ -7718,6 +7862,18 @@
     "12": {
         "client_name": "strasbourg",
         "num_samples": 365,
+        "data_metrics": {
+            "mean": [
+                0.333326835542509,
+                0.358402331397958,
+                0.3137184241454895
+            ],
+            "std": [
+                0.1851949929189928,
+                0.18744750965173596,
+                0.18584984476366365
+            ]
+        },
         "data": [
             [
                 "leftImg8bit/train/strasbourg/strasbourg_000000_000065_leftImg8bit.png",
@@ -9184,6 +9340,18 @@
     "13": {
         "client_name": "stuttgart",
         "num_samples": 196,
+        "data_metrics": {
+            "mean": [
+                0.29860374274454554,
+                0.3394486199380184,
+                0.30040730710844604
+            ],
+            "std": [
+                0.19498450312628282,
+                0.19935443942189082,
+                0.19424811849056073
+            ]
+        },
         "data": [
             [
                 "leftImg8bit/train/stuttgart/stuttgart_000000_000019_leftImg8bit.png",
@@ -9974,6 +10142,18 @@
     "14": {
         "client_name": "tubingen",
         "num_samples": 144,
+        "data_metrics": {
+            "mean": [
+                0.3112740603586038,
+                0.35416776935259503,
+                0.30684712363613975
+            ],
+            "std": [
+                0.19241039175800265,
+                0.19642328580443688,
+                0.1918816840185659
+            ]
+        },
         "data": [
             [
                 "leftImg8bit/train/tubingen/tubingen_000000_000019_leftImg8bit.png",
@@ -10556,6 +10736,18 @@
     "15": {
         "client_name": "ulm",
         "num_samples": 95,
+        "data_metrics": {
+            "mean": [
+                0.28496651492620767,
+                0.32928470796660375,
+                0.2898900957483994
+            ],
+            "std": [
+                0.20150218246318471,
+                0.20427177527411935,
+                0.20395634497589776
+            ]
+        },
         "data": [
             [
                 "leftImg8bit/train/ulm/ulm_000000_000019_leftImg8bit.png",
@@ -10942,6 +11134,18 @@
     "16": {
         "client_name": "weimar",
         "num_samples": 142,
+        "data_metrics": {
+            "mean": [
+                0.2934826217906576,
+                0.33130882449553045,
+                0.2845622825790459
+            ],
+            "std": [
+                0.2159881436518619,
+                0.21654817119013872,
+                0.21086648333636773
+            ]
+        },
         "data": [
             [
                 "leftImg8bit/train/weimar/weimar_000000_000019_leftImg8bit.png",
@@ -11516,6 +11720,18 @@
     "17": {
         "client_name": "zurich",
         "num_samples": 122,
+        "data_metrics": {
+            "mean": [
+                0.2844284816843564,
+                0.33072644203412727,
+                0.2946295713792082
+            ],
+            "std": [
+                0.20079181570799517,
+                0.20429439899357416,
+                0.19973103645722964
+            ]
+        },
         "data": [
             [
                 "leftImg8bit/train/zurich/zurich_000000_000019_leftImg8bit.png",
