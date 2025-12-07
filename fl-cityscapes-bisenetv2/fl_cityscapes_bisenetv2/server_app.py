@@ -1,5 +1,6 @@
 """fl-cityscapes-bisenetv2: A Flower / PyTorch app."""
 
+import json
 import torch
 from flwr.app import ArrayRecord, ConfigRecord, Context
 from flwr.serverapp import Grid, ServerApp
@@ -68,7 +69,7 @@ def main(grid: Grid, context: Context) -> None:
     )
 
     # Start strategy
-    _ = strategy.start(
+    results = strategy.start(
         grid=grid,
         initial_arrays=arrays,
         train_config=ConfigRecord(
@@ -79,3 +80,6 @@ def main(grid: Grid, context: Context) -> None:
         num_rounds=num_rounds,
         evaluate_fn=evaluate_fn,
     )
+
+    with open(context.run_config["server-results-file"], "w") as f:
+        json.dump(results, f, indent=4)
