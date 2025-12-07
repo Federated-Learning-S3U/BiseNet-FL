@@ -24,6 +24,8 @@ def train(msg: Message, context: Context):
     local_epochs: int = context.run_config["local-epochs"]
     batch_size: int = context.run_config["batch_size"]
 
+    weight_decay: float = context.run_config["weight_decay"]
+
     im_root: str = context.run_config["im_root"]
     client_data_partition: str = context.run_config["client_data_partition"]
 
@@ -54,7 +56,7 @@ def train(msg: Message, context: Context):
         trainloader,
         local_epochs,
         msg.content["config"]["lr"],
-        msg.content["config"]["weight_decay"],
+        weight_decay,
         device,
         num_aux_heads,
     )

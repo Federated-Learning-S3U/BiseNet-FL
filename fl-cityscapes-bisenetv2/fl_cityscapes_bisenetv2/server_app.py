@@ -4,11 +4,14 @@ import torch
 from flwr.app import ArrayRecord, ConfigRecord, Context
 from flwr.serverapp import Grid, ServerApp
 
-from flwr.serverapp.strategy import FedAvg, FedAvgM, FedProx
-
 from lib.models import BiSeNetV2
 
 from fl_cityscapes_bisenetv2.task import make_central_evaluate
+from fl_cityscapes_bisenetv2.strategies import (
+    CustomFedAvg,
+    CustomFedProx,
+    CustomFedAvgM,
+)
 
 # Create ServerApp
 app = ServerApp()
@@ -29,18 +32,19 @@ def main(grid: Grid, context: Context) -> None:
     rounds_trained = context.run_config["rounds_trained"]
 
     lr: float = context.run_config["lr"]
-    weight_decay: float = context.run_config["weight_decay"]
 
     strategy_name: str = context.run_config["strategy_name"]
 
     # Load global model
     global_model = BiSeNetV2(num_classes)
 
+    # Load pretrained model if resuming
     if resume:
         print(f"[Server] Resuming from pretrained model at {pretrained_path}")
         sd = torch.load(pretrained_path, map_location="cpu")
         global_model.load_state_dict(sd, strict=True)
         print(f"[Server] Pretrained model trained on {rounds_trained} rounds.")
+    # Else start from random initialized model
     else:
         print(f"[Server] Starting from random initialized model.")
         print(f"[Server] Initial model trained on {rounds_trained} rounds.")
@@ -50,17 +54,19 @@ def main(grid: Grid, context: Context) -> None:
     # Create central evaluation function that accepts context as an argument
     evaluate_fn = make_central_evaluate(context)
 
-    # Initialize FedAvg strategy
-    strategy = eval(strategy_name)(fraction_train=fraction_train, fraction_evaluate=0.0)
+    # Initialize Custom strategy
+    custom_strategy_name = "Custom" + strategy_name
+    strategy = eval(custom_strategy_name)(
+        fraction_train=fraction_train, fraction_evaluate=0.0
+    )
 
-    # Start strategy, run FedAvg for `num_rounds`
-    result = strategy.start(
+    # Start strategy
+    _ = strategy.start(
         grid=grid,
         initial_arrays=arrays,
         train_config=ConfigRecord(
             {
                 "lr": lr,
-                "weight_decay": weight_decay,
             }
         ),
         num_rounds=num_rounds,

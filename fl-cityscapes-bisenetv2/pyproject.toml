@@ -46,7 +46,7 @@ server-device = "cuda"
 # Server Loading Config
 resume = false
 pretrained_path = "./res/latest_model.pt"
-rounds_trained = 0
+rounds_trained = 0 # IMPORTANT Need Update on Resume
 
 # Server evaluation config
 eval-batch-size = 1
@@ -66,7 +66,8 @@ server_data_partition = "./datasets/cityscapes/val.txt"
 # Model Configs
 num_classes = 19
 
-lr = 5e-3
+lr = 5e-3 # IMPORTANT Need Update on Resume
+
 weight_decay = 5e-4
 
 num_aux_heads = 4
@@ -78,7 +79,7 @@ cropsize = "[512, 1024]"
 save_latest = "./res/latest_model.pt"
 save_best = "./res/best_model.pt"
 
-best_miou = 0.0
+best_miou = 0.0 # IMPORTANT Need Update on Resume
 best_metric = "./res/best_metric.json"
 latest_metric = "./res/latest_metric.json"
 

@@ -27,16 +27,6 @@ def train(net, trainloader, epochs, lr, wd, device, num_aux_heads):
 
     scaler = amp.GradScaler()
 
-    # lr_scheduler = WarmupPolyLrScheduler( # TODO: Check if LR scheduler is needed, either client or server
-    #     self.optimizer,
-    #     power=0.9,
-    #     max_iter=self.cfg.max_iter,
-    #     warmup_iter=self.cfg.warmup_iters,
-    #     warmup_ratio=0.1,
-    #     warmup="exp",
-    #     last_epoch=-1,
-    # )
-
     net.train()
     running_loss = 0.0
     for _ in range(epochs):
