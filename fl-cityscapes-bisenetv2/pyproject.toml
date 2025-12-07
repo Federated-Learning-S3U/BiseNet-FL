@@ -45,7 +45,7 @@ server-device = "cuda"
 
 # Server Loading Config
 resume = false
-pretrained_path = "./res/latest_model.pt"
+pretrained-path = "./res/latest_model.pt"
 rounds-trained = 0 # IMPORTANT Need Update on Resume
 
 # Server evaluation config

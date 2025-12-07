@@ -114,9 +114,9 @@ def make_central_evaluate(context: Context):
     save_best = context.run_config["save-best"]
     best_metric_file = context.run_config["best-metric"]
     latest_metric_file = context.run_config["latest-metric"]
-    client_data_file = context.run_config["client-data-file"]
+    client_data_partition = context.run_config["client-data-partition"]
 
-    data_mean, data_std = aggregate_client_metrics(client_data_file)
+    data_mean, data_std = aggregate_client_metrics(client_data_partition)
     data_metrics = {"mean": data_mean, "std": data_std}
 
     def central_evaluate(server_round: int, arrays: ArrayRecord) -> MetricRecord:
