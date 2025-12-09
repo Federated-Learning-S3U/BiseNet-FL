@@ -24,11 +24,11 @@ class CustomFedProx(FedProx):
     ) -> Iterable[Message]:
         """Configure the next round of federated training and maybe do LR decay."""
         # Decrease learning rate by a factor of 0.9 every 5 rounds
-        if server_round % 5 == 0 and server_round > 0:
-            config["lr"] *= 0.9
+        if server_round % self.lr_decay_rounds == 0 and server_round > 0:
+            config["lr"] *= self.lr_decay_factor
             print("LR decreased to:", config["lr"])
 
-            with open("./res/lr_schedule.json", "w") as f:
+            with open(self.lr_schedule_file, "w") as f:
                 json.dump({"round": server_round, "lr": config["lr"]}, f)
 
         # Pass the updated config and the rest of arguments to the parent class
