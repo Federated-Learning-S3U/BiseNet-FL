@@ -38,19 +38,27 @@ clientapp = "fl_cityscapes_bisenetv2.client_app:app"
 [tool.flwr.app.config]
 # Server-side FL config
 strategy-name = "FedAvg" # Options: FedAvg, FedAvgM, FedProx
-num-server-rounds = 50
+num-server-rounds = 300
 fraction-train = 0.5
 fraction-evaluate = 0.0
 server-device = "cuda"
 
 # Server Loading Config
-resume = false
+resume = true
 pretrained-path = "./res/latest_model.pt"
-rounds-trained = 0 # IMPORTANT Need Update on Resume
+rounds-trained = 190 # IMPORTANT Need Update on Resume
+
+# Strategy-specific config
+# FedAvgM config
+server-momentum = 0.95
+server-learning-rate = 1.0
+
+# FedProx config
+proximity-mu = 0.005
 
 # Server evaluation config
 eval-batch-size = 1
-eval-interval = 3
+eval-interval = 1
 
 # Client-side FL config
 client-device = "cuda"
@@ -67,7 +75,7 @@ server-data-partition = "./datasets/cityscapes/val.txt"
 num-classes = 19
 lb-ignore = 255
 
-lr = 5e-3 # IMPORTANT Need Update on Resume
+lr = 9.124001815700379e-05 # IMPORTANT Need Update on Resume
 lr-decay-factor = 0.9
 lr-decay-rounds = 5
 lr-schedule-file = "./res/lr_schedule.json"
@@ -84,7 +92,7 @@ save-latest = "./res/latest_model.pt"
 save-best = "./res/best_model.pt"
 server-results-file = "./res/server_results.txt"
 
-best-miou = 0.0 # IMPORTANT Need Update on Resume
+best-miou = 0.4516192617812664 # IMPORTANT Need Update on Resume
 best-metric = "./res/best_metric.json"
 latest-metric = "./res/latest_metric.json"
 
@@ -95,8 +103,10 @@ default = "local-simulation-single-gpu"
 # Local simulation federation with 18 virtual SuperNodes
 [tool.flwr.federations.local-simulation-single-gpu]
 options.num-supernodes = 18
-options.backend.client-resources.num-cpus = 2
-options.backend.client-resources.num-gpus = 1.0
+options.backend.client-resources.num-cpus = 2 # Number of CPUs per Client
+options.backend.client-resources.num-gpus = 1.0 # Fractional GPU allocation per Client
+options.backend.init_args.num_cpus = 2 # Number of CPUs for the simulation controller 
+options.backend.init_args.num_gpus = 1 # Number of GPUs for the simulation controller
 
 # Remote federation example for use with SuperLink
 [tool.flwr.federations.remote-federation]
