@@ -126,6 +126,7 @@ log*txt
 
 tvm/
 
-/datasets/
+/datasets/cityscapes/leftImg8bit/
+/datasets/cityscapes/gtFine/
 
 *.pt
