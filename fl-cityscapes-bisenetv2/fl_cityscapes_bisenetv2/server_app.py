@@ -38,6 +38,17 @@ def main(grid: Grid, context: Context) -> None:
     lr_schedule_file: str = context.run_config["lr-schedule-file"]
 
     strategy_name: str = context.run_config["strategy-name"]
+    custom_strategy_name = "Custom" + strategy_name
+
+    # Read Strategy Params
+    strategy_params = {}
+    if strategy_name == "FedProx":
+        strategy_params["proximal_mu"] = context.run_config["proximity-mu"]
+    elif strategy_name == "FedAvgM":
+        strategy_params["server_momentum"] = context.run_config["server-momentum"]
+        strategy_params["server_learning_rate"] = context.run_config[
+            "server-learning-rate"
+        ]
 
     # Load global model
     global_model = BiSeNetV2(num_classes)
@@ -59,13 +70,13 @@ def main(grid: Grid, context: Context) -> None:
     evaluate_fn = make_central_evaluate(context)
 
     # Initialize Custom strategy
-    custom_strategy_name = "Custom" + strategy_name
     strategy = eval(custom_strategy_name)(
         fraction_train=fraction_train,
         fraction_evaluate=0.0,
         lr_schedule_file=lr_schedule_file,
         lr_decay_factor=lr_decay_factor,
         lr_decay_rounds=lr_decay_rounds,
+        **strategy_params,
     )
 
     # Start strategy

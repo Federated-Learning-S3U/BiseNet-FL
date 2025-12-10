@@ -2,6 +2,7 @@
 
 import json
 import numpy as np
+import copy
 
 import torch
 import torch.amp as amp
@@ -18,8 +19,13 @@ from fl_cityscapes_bisenetv2.utils.model_utils import set_optimizer
 from fl_cityscapes_bisenetv2.data_preparation.utils import aggregate_client_metrics
 
 
-def train(net, trainloader, epochs, lr, wd, device, num_aux_heads):
+def train(net, trainloader, epochs, lr, wd, device, num_aux_heads, strategy, prox_mu):
     """Train the model on the training set."""
+    global_weights = None
+    if strategy == "FedProx":
+        global_params = copy.deepcopy(net)
+        global_weights = list(global_params.parameters())
+
     net.to(device)
     criterion_pre = OhemCELoss(0.7, device=device)
     criterion_aux = [OhemCELoss(0.7, device=device) for _ in range(num_aux_heads)]
@@ -39,11 +45,20 @@ def train(net, trainloader, epochs, lr, wd, device, num_aux_heads):
 
             with amp.autocast(device_type="cuda", enabled=False):
                 logits, *logits_aux = net(images)
+
                 loss_pre = criterion_pre(logits, labels)
                 loss_aux = [
                     crit(lgt, labels) for crit, lgt in zip(criterion_aux, logits_aux)
                 ]
                 loss = loss_pre + sum(loss_aux)
+
+                # FedProx: add proximal term to the loss
+                if strategy == "FedProx":
+                    proximal_term = 0.0
+                    local_weights = list(net.parameters())
+                    for w, w_t in zip(local_weights, global_weights):
+                        proximal_term += (w - w_t).norm(2)
+                    loss += (prox_mu / 2) * proximal_term
 
             scaler.scale(loss).backward()
             scaler.step(optimizer)

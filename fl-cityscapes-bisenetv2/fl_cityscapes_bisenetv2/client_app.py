@@ -50,15 +50,18 @@ def train(msg: Message, context: Context):
     )
 
     # Call the training function
+    prox_mu = msg.content["config"].get("proximal-mu", 0.0)
     print(f"[Client {partition_id}] Starting training.")
     train_loss = train_fn(
-        model,
-        trainloader,
-        local_epochs,
-        msg.content["config"]["lr"],
-        weight_decay,
-        device,
-        num_aux_heads,
+        net=model,
+        trainloader=trainloader,
+        epochs=local_epochs,
+        lr=msg.content["config"]["lr"],
+        wd=weight_decay,
+        device=device,
+        num_aux_heads=num_aux_heads,
+        strategy=context.run_config["strategy-name"],
+        prox_mu=prox_mu,
     )
 
     model.cpu()
