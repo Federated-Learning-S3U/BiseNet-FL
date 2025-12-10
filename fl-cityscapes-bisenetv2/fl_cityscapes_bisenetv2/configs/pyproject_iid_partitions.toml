@@ -1,4 +1,9 @@
-# FLWR TOML CONFIG FILE
+# FLWR TOML CONFIG FILE FOR CITYSCAPES WITH CITY PARTITIONS
+
+# Dataset Setup: 10 clients,
+# average of 280 image per client,
+# partition is considered to be iid,
+# based on dirichlet distribution.
 
 [build-system]
 requires = ["hatchling"]
@@ -28,14 +33,14 @@ clientapp = "fl_cityscapes_bisenetv2.client_app:app"
 server-device = "cuda"
 strategy-name = "FedAvg" # Options: FedAvg, FedAvgM, FedProx
 num-server-rounds = 100
-fraction-train = 0.5
+fraction-train = 1.0
 fraction-evaluate = 0.0
 
 # Server-side Resume Training Configs
 # IMPORTANT UPDATE ON RESUME
 resume = false
-pretrained-path = "./res/latest_model.pt"
-rounds-trained = 0 
+pretrained-path = "/kaggle/working/res/latest_model.pt" # Might need to be added as an input model
+rounds-trained = 0
 
 # Strategy-specific Configs
 # FedAvgM Configs
@@ -46,34 +51,34 @@ server-learning-rate = 1.0
 proximity-mu = 0.005
 
 # Server-side Evaluation Configs
-eval-batch-size = 1
+eval-batch-size = 8
 eval-interval = 1
 server-data-partition = "./datasets/cityscapes/val.txt"
 
 # Server-side Saving Configs
-save-latest = "./res/latest_model.pt"
-save-best = "./res/best_model.pt"
-server-results-file = "./res/server_results.txt"
+save-latest = "/kaggle/working/res/latest_model.pt"
+save-best = "/kaggle/working/res/best_model.pt"
+server-results-file = "/kaggle/working/res/server_results.txt"
 
 best-miou = 0.0 # IMPORTANT UPDATE ON RESUME
-best-metric = "./res/best_metric.json"
-latest-metric = "./res/latest_metric.json"
+best-metric = "/kaggle/working/res/best_metric.json"
+latest-metric = "/kaggle/working/res/latest_metric.json"
 
 # Client-side FL Configs
 client-device = "cuda"
 
 # Client Dataset Paths
-im-root = "./datasets/cityscapes"
+im-root = "/kaggle/input/cityscapes-fine-dataset"
 client-data-partition = "./datasets/cityscapes/city_partitions.json"
 
 # Model Training Hyper-Params
-local-epochs = 1
-batch-size = 4
+local-epochs = 3 # Note, on increasing local epochs may require reducing the LR
+batch-size = 8 # Fix batch for memory constraints
 
-lr = 5e-2 # IMPORTANT UPDATE ON RESUME
-lr-decay-factor = 0.95
+lr = 1e-2 # IMPORTANT UPDATE ON RESUME
+lr-decay-factor = 0.9
 lr-decay-rounds = 10
-lr-schedule-file = "./res/lr_schedule.json"
+lr-schedule-file = "/kaggle/working/res/lr_schedule.json"
 
 # Model Configs
 num-classes = 19
