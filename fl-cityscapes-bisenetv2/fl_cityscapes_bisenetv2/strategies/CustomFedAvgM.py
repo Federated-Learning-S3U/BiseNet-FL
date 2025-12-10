@@ -118,7 +118,6 @@ class CustomFedAvgM(FedAvg):
                 pseudo_gradient = self.momentum_vector
 
             # SGD and convert back to ArrayRecord
-            # *** THIS IS THE FIX: Using Array.from_numpy_ndarray() ***
             updated_array_list = [
                 Array.from_numpy_ndarray(np.array(old - self.server_learning_rate * pg))
                 for old, pg in zip(ndarrays, pseudo_gradient, strict=True)
