@@ -69,7 +69,7 @@ client-device = "cuda"
 
 # Client Dataset Paths
 im-root = "/kaggle/input/cityscapes-fine-dataset"
-client-data-partition = "./datasets/cityscapes/city_partitions.json"
+client-data-partition = "./datasets/cityscapes/city_non_iid_partitions.json"
 
 # Model Training Hyper-Params
 local-epochs = 3 # Note, on increasing local epochs may require reducing the LR
