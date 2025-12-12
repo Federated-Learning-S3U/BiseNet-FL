@@ -66,7 +66,7 @@ def train(net, trainloader, epochs, lr, wd, device, num_aux_heads, strategy, pro
 
             running_loss += loss.item()
 
-    avg_trainloss = running_loss / len(trainloader)
+    avg_trainloss = running_loss / (len(trainloader) * epochs)
 
     return avg_trainloss
 
