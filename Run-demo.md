@@ -3,7 +3,9 @@
 1. Create Python3.11 Virtual Environment
 ```
 python3.11 -m venv env
+source env/bin/activate
 ```
+
 
 2. Install dependencies defined in `pyproject.toml`
 ```

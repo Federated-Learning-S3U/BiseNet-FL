@@ -5,8 +5,9 @@ import json
 from torch.utils.data import DataLoader
 
 import lib.data.transform_cv2 as T
-from fl_cityscapes_bisenetv2.data_preparation.client_dataset import (
+from fl_cityscapes_bisenetv2.data_preparation import (
     CityScapesClientDataset,
+    RandomPadSampler,
 )
 
 
@@ -31,15 +32,18 @@ def load_client_train_data(
         T.TransformationTrain(scales, cropsize),
     )
 
-    # Construct dataloader
+    sampler = RandomPadSampler(ds, batch_size)
+
     trainloader = DataLoader(
         ds,
         batch_size=batch_size,
-        shuffle=True,
+        sampler=sampler,
+        shuffle=False,
         num_workers=4,
         pin_memory=True,
-        drop_last=True,
+        drop_last=False,
     )
+
     return trainloader
 
 

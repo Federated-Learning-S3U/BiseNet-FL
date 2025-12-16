@@ -1,9 +1,7 @@
 """Fl CityScapes BiSeNetV2 Client Dataset Module"""
 
-import logging
 import os
 
-import numpy as np
 import cv2
 from torch.utils.data import Dataset
 import lib.data.transform_cv2 as T
