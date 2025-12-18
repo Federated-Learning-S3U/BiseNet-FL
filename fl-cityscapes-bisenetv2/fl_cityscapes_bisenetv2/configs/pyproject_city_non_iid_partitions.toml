@@ -100,6 +100,6 @@ default = "local-simulation-single-gpu"
 [tool.flwr.federations.local-simulation-single-gpu]
 options.backend.init_args.num_cpus = 2 # Number of CPUs for the simulation controller 
 options.backend.init_args.num_gpus = 1 # Number of GPUs for the simulation controller
-options.num-supernodes = 90 # Number of SuperNodes (i.e., Clients) in the Data Setup
+options.num-supernodes = 55 # Number of SuperNodes (i.e., Clients) in the Data Setup
 options.backend.client-resources.num-cpus = 2 # Number of CPUs per Client
 options.backend.client-resources.num-gpus = 1.0 # Fractional GPU allocation per Client

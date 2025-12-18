@@ -33,7 +33,7 @@ clientapp = "fl_cityscapes_bisenetv2.client_app:app"
 server-device = "cuda"
 strategy-name = "FedAvg" # Options: FedAvg, FedAvgM, FedProx
 num-server-rounds = 50
-fraction-train = 1.0
+fraction-train = 0.5
 fraction-evaluate = 0.0
 
 # Server-side Resume Training Configs
@@ -100,6 +100,6 @@ default = "local-simulation-single-gpu"
 [tool.flwr.federations.local-simulation-single-gpu]
 options.backend.init_args.num_cpus = 2 # Number of CPUs for the simulation controller 
 options.backend.init_args.num_gpus = 1 # Number of GPUs for the simulation controller
-options.num-supernodes = 10 # Number of SuperNodes (i.e., Clients) in the Data Setup
+options.num-supernodes = 20 # Number of SuperNodes (i.e., Clients) in the Data Setup
 options.backend.client-resources.num-cpus = 2 # Number of CPUs per Client
 options.backend.client-resources.num-gpus = 1.0 # Fractional GPU allocation per Client
