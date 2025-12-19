@@ -26,7 +26,7 @@ clientapp = "fl_cityscapes_bisenetv2.client_app:app"
 
 # Server-side FL configs
 server-device = "cuda"
-strategy-name = "FedAvg" # Options: FedAvg, FedAvgM, FedProx
+strategy-name = "FedAvg" # Options: FedAvg, FedAvgM, FedProx, FedEMA
 num-server-rounds = 100
 fraction-train = 0.5
 fraction-evaluate = 0.0
@@ -38,7 +38,7 @@ pretrained-path = "./res/latest_model.pt"
 rounds-trained = 0 
 
 # Strategy-specific Configs
-# FedAvgM Configs
+# FedAvgM / FedEMA Configs
 server-momentum = 0.95
 server-learning-rate = 1.0
 

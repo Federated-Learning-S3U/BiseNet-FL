@@ -11,6 +11,7 @@ from fl_cityscapes_bisenetv2.strategies import (
     CustomFedAvg,
     CustomFedProx,
     CustomFedAvgM,
+    CustomFedEMA,
 )
 
 # Create ServerApp
@@ -48,6 +49,8 @@ def main(grid: Grid, context: Context) -> None:
         strategy_params["server_learning_rate"] = context.run_config[
             "server-learning-rate"
         ]
+    elif strategy_name == "FedEMA":
+        strategy_params["server_momentum"] = context.run_config["server-momentum"]
 
     # Load global model
     global_model = BiSeNetV2(num_classes)
