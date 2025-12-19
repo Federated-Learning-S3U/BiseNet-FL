@@ -77,15 +77,14 @@ class CustomFedEMA(CustomFedAvg):
             # Apply EMA: theta_new = beta * theta_old + (1 - beta) * theta_agg
             beta = self.server_momentum
             new_ndarrays = [
-                beta * old + (1 - beta) * agg
+                np.array(beta * old + (1 - beta) * agg)
                 for old, agg in zip(old_ndarrays, agg_ndarrays, strict=True)
             ]
 
             # Convert back to ArrayRecord
             array_keys = list(aggregated_arrays.keys())
             aggregated_arrays = ArrayRecord(
-                dict(zip(array_keys, [Array.from_numpy_ndarray(arr)
-                     for arr in new_ndarrays], strict=True))
+                dict(zip(array_keys, [Array.from_numpy_ndarray(arr) for arr in new_ndarrays], strict=True))
             )
 
             # Update current arrays
