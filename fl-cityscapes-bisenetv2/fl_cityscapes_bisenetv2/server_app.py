@@ -12,6 +12,7 @@ from fl_cityscapes_bisenetv2.strategies import (
     CustomFedProx,
     CustomFedAvgM,
     CustomFedEMA,
+    CustomFedSiloBN,
 )
 
 # Create ServerApp
@@ -51,6 +52,10 @@ def main(grid: Grid, context: Context) -> None:
         ]
     elif strategy_name == "FedEMA":
         strategy_params["server_momentum"] = context.run_config["server-momentum"]
+    elif strategy_name == "FedSiloBN":
+        # FedSiloBN doesn't require additional parameters
+        # BN layers are automatically excluded from aggregation
+        pass
 
     # Load global model
     global_model = BiSeNetV2(num_classes)
