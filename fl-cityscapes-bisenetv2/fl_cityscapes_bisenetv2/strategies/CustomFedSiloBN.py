@@ -2,9 +2,10 @@
 SiloBN (Siloed Batch Normalization) Federated Learning Strategy.
 
 In SiloBN, each client maintains its own local batch normalization statistics
-(running_mean, running_var, weight, bias), while only the non-BN parameters
-are aggregated across clients. This helps handle data heterogeneity by allowing
-each client to adapt its BN layers to its local data distribution.
+(running_mean, running_var), while all learnable parameters including BN's
+gamma (weight) and beta (bias) are aggregated across clients. This helps 
+handle data heterogeneity by allowing each client to adapt its BN statistics 
+to its local data distribution while still learning shared affine transformations.
 
 Reference:
     Andreux, M., du Terrail, J. O., Beguier, C., & Tramel, E. W. (2020).
@@ -30,78 +31,100 @@ from flwr.common import (
 from .CustomFedAvg import CustomFedAvg
 
 
-def is_bn_param(param_name: str) -> bool:
+def is_bn_statistic(param_name: str) -> bool:
     """
-    Check if a parameter belongs to a BatchNorm layer.
+    Check if a parameter is a BatchNorm STATISTIC (not learnable).
     
-    BatchNorm parameters typically have names containing:
-    - 'bn' (batch norm layer name)
-    - 'running_mean', 'running_var' (BN statistics)
-    - 'num_batches_tracked' (BN tracking counter)
+    Only these should be kept local:
+    - 'running_mean' - Running mean estimate (non-learnable)
+    - 'running_var' - Running variance estimate (non-learnable)
+    - 'num_batches_tracked' - Counter for batches seen (non-learnable)
+    
+    Note: BN weight (gamma) and bias (beta) ARE learnable and should be aggregated.
     
     Args:
         param_name: Name of the parameter
         
     Returns:
-        True if parameter belongs to BatchNorm layer
+        True if parameter is a BN statistic (should be kept local)
     """
-    bn_keywords = [
-        'bn.weight', 'bn.bias', 
-        'bn.running_mean', 'bn.running_var', 
-        'bn.num_batches_tracked',
-        '.bn.', '_bn.',
-        'running_mean', 'running_var', 'num_batches_tracked'
+    # Only match non-learnable BN statistics
+    bn_statistic_keywords = [
+        'running_mean',
+        'running_var', 
+        'num_batches_tracked'
     ]
     
-    # Check for explicit BatchNorm parameter patterns
     param_lower = param_name.lower()
     
-    # Match common BN naming patterns
-    for keyword in bn_keywords:
-        if keyword.lower() in param_lower:
+    for keyword in bn_statistic_keywords:
+        if keyword in param_lower:
             return True
     
     return False
 
 
-def split_bn_params(arrays: ArrayRecord) -> tuple[dict, dict]:
+def split_bn_statistics(arrays: ArrayRecord) -> tuple[dict, dict]:
     """
-    Split parameters into BatchNorm and non-BatchNorm parameters.
+    Split parameters into aggregatable params and local BN statistics.
     
     Args:
         arrays: ArrayRecord containing all model parameters
         
     Returns:
-        Tuple of (non_bn_params_dict, bn_params_dict)
+        Tuple of (aggregatable_params_dict, bn_statistics_dict)
+        - aggregatable_params: Conv, FC, AND BN gamma/beta (all learnable params)
+        - bn_statistics: Only running_mean, running_var, num_batches_tracked
     """
-    non_bn_params = {}
-    bn_params = {}
+    aggregatable_params = {}
+    bn_statistics = {}
     
     for key in arrays.keys():
-        if is_bn_param(key):
-            bn_params[key] = arrays[key]
+        if is_bn_statistic(key):
+            bn_statistics[key] = arrays[key]
         else:
-            non_bn_params[key] = arrays[key]
+            aggregatable_params[key] = arrays[key]
     
-    return non_bn_params, bn_params
+    return aggregatable_params, bn_statistics
+
+
+# Keep old functions for backward compatibility
+def is_bn_param(param_name: str) -> bool:
+    """Backward compatible: Check if param is BN statistic."""
+    return is_bn_statistic(param_name)
+
+
+def split_bn_params(arrays: ArrayRecord) -> tuple[dict, dict]:
+    """Backward compatible: Split into aggregatable and local params."""
+    return split_bn_statistics(arrays)
 
 
 class CustomFedSiloBN(CustomFedAvg):
     """
     Federated Learning with Siloed Batch Normalization (SiloBN) strategy.
     
-    This strategy keeps batch normalization layers local to each client,
-    only aggregating the non-BN parameters. This helps handle statistical
-    heterogeneity across clients by allowing each client to maintain
-    BN statistics adapted to its local data distribution.
+    This strategy keeps only batch normalization STATISTICS local to each client
+    (running_mean, running_var), while aggregating ALL learnable parameters
+    including BN's gamma (weight) and beta (bias).
     
     Key features:
-    - Non-BN parameters: Aggregated using weighted averaging (like FedAvg)
-    - BN parameters: Kept local on each client (not aggregated)
-    - Server maintains a reference set of BN parameters for evaluation
+    - Learnable parameters (Conv, FC, BN gamma/beta): Aggregated using weighted averaging
+    - BN statistics (running_mean, running_var): Kept local on each client
+    - Server maintains averaged BN statistics for evaluation purposes
+    
+    What gets aggregated:
+    - All convolutional layer weights and biases
+    - All fully connected layer weights and biases  
+    - BN weight (gamma) - learnable scale parameter
+    - BN bias (beta) - learnable shift parameter
+    
+    What stays local:
+    - running_mean - running mean estimate
+    - running_var - running variance estimate
+    - num_batches_tracked - batch counter
     
     Attributes:
-        server_bn_params: BN parameters maintained on server for evaluation
+        server_bn_statistics: BN statistics maintained on server for evaluation
     """
     
     def __init__(
@@ -109,13 +132,14 @@ class CustomFedSiloBN(CustomFedAvg):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.server_bn_params: dict | None = None
-        self.initial_bn_params: dict | None = None
+        self.server_bn_statistics: dict | None = None
+        self.initial_bn_statistics: dict | None = None
     
     def summary(self) -> None:
         """Log summary configuration of the strategy."""
         log(INFO, "\t├──> FedSiloBN settings:")
-        log(INFO, "\t│\t└── BN layers: Local (not aggregated)")
+        log(INFO, "\t│\t└── BN statistics (running_mean/var): Local (not aggregated)")
+        log(INFO, "\t│\t└── BN gamma/beta: Aggregated (learnable)")
         log(INFO, "\t│\t└── Non-BN layers: Aggregated (FedAvg)")
         super().summary()
     
@@ -124,12 +148,12 @@ class CustomFedSiloBN(CustomFedAvg):
     ) -> Iterable[Message]:
         """Configure the next round of federated training."""
         
-        # On first round, store initial BN params for server-side evaluation
-        if server_round == 1 and self.initial_bn_params is None:
-            _, bn_params = split_bn_params(arrays)
-            self.initial_bn_params = bn_params
-            self.server_bn_params = bn_params
-            log(INFO, f"[SiloBN] Stored {len(bn_params)} BN parameters for server evaluation")
+        # On first round, store initial BN statistics for server-side evaluation
+        if server_round == 1 and self.initial_bn_statistics is None:
+            _, bn_stats = split_bn_statistics(arrays)
+            self.initial_bn_statistics = bn_stats
+            self.server_bn_statistics = bn_stats
+            log(INFO, f"[SiloBN] Stored {len(bn_stats)} BN statistics for server evaluation")
         
         # Call parent to handle LR decay and standard config
         return super().configure_train(server_round, arrays, config, grid)
@@ -140,12 +164,13 @@ class CustomFedSiloBN(CustomFedAvg):
         replies: Iterable[Message],
     ) -> tuple[ArrayRecord | None, MetricRecord | None]:
         """
-        Aggregate only non-BN parameters from client updates.
+        Aggregate all learnable parameters, keep only BN statistics local.
         
         The aggregation process:
-        1. Extract non-BN parameters from each client
-        2. Aggregate non-BN parameters using weighted averaging
-        3. Combine aggregated non-BN params with server's BN params
+        1. Extract learnable params (including BN gamma/beta) from each client
+        2. Aggregate learnable params using weighted averaging
+        3. Update server's BN statistics by averaging (for evaluation only)
+        4. Combine aggregated params with server's BN statistics
         """
         
         # Convert replies to a list to allow multiple iterations
@@ -185,21 +210,22 @@ class CustomFedSiloBN(CustomFedAvg):
         
         # Split first client's arrays to get parameter keys
         first_arrays = client_arrays_list[0]
-        non_bn_keys, bn_keys = [], []
+        aggregatable_keys = []  # Conv, FC, AND BN gamma/beta
+        bn_statistic_keys = []  # Only running_mean, running_var, num_batches_tracked
         
         for key in first_arrays.keys():
-            if is_bn_param(key):
-                bn_keys.append(key)
+            if is_bn_statistic(key):
+                bn_statistic_keys.append(key)
             else:
-                non_bn_keys.append(key)
+                aggregatable_keys.append(key)
         
-        log(INFO, f"[SiloBN] Round {server_round}: Aggregating {len(non_bn_keys)} non-BN params, "
-                  f"keeping {len(bn_keys)} BN params local")
+        log(INFO, f"[SiloBN] Round {server_round}: Aggregating {len(aggregatable_keys)} params "
+                  f"(including BN gamma/beta), keeping {len(bn_statistic_keys)} BN statistics local")
         
-        # Aggregate only non-BN parameters
-        aggregated_non_bn = {}
+        # Aggregate all learnable parameters (including BN gamma and beta)
+        aggregated_params = {}
         
-        for key in non_bn_keys:
+        for key in aggregatable_keys:
             weighted_sum = None
             
             for client_arrays, weight in zip(client_arrays_list, normalized_weights):
@@ -211,14 +237,14 @@ class CustomFedSiloBN(CustomFedAvg):
                 else:
                     weighted_sum += weight * param_np
             
-            aggregated_non_bn[key] = Array.from_numpy_ndarray(weighted_sum)
+            aggregated_params[key] = Array.from_numpy_ndarray(weighted_sum)
         
-        # Update server BN params by averaging (for server-side evaluation only)
+        # Update server BN statistics by averaging (for server-side evaluation only)
         # This gives a reasonable estimate for central evaluation
-        if self.server_bn_params is not None and bn_keys:
-            updated_bn_params = {}
+        if bn_statistic_keys:
+            updated_bn_statistics = {}
             
-            for key in bn_keys:
+            for key in bn_statistic_keys:
                 weighted_sum = None
                 
                 for client_arrays, weight in zip(client_arrays_list, normalized_weights):
@@ -232,17 +258,17 @@ class CustomFedSiloBN(CustomFedAvg):
                             weighted_sum += weight * param_np
                 
                 if weighted_sum is not None:
-                    updated_bn_params[key] = Array.from_numpy_ndarray(weighted_sum)
-                elif key in self.server_bn_params:
-                    updated_bn_params[key] = self.server_bn_params[key]
+                    updated_bn_statistics[key] = Array.from_numpy_ndarray(weighted_sum)
+                elif self.server_bn_statistics and key in self.server_bn_statistics:
+                    updated_bn_statistics[key] = self.server_bn_statistics[key]
             
-            self.server_bn_params = updated_bn_params
+            self.server_bn_statistics = updated_bn_statistics
         
-        # Combine aggregated non-BN params with server BN params for the global model
-        combined_params = {**aggregated_non_bn}
+        # Combine aggregated params with server BN statistics for the global model
+        combined_params = {**aggregated_params}
         
-        if self.server_bn_params is not None:
-            combined_params.update(self.server_bn_params)
+        if self.server_bn_statistics is not None:
+            combined_params.update(self.server_bn_statistics)
         
         aggregated_arrays = ArrayRecord(combined_params)
         
