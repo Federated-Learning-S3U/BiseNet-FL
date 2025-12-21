@@ -258,6 +258,9 @@ class CustomFedSiloBN(CustomFedAvg):
                             weighted_sum += weight * param_np
                 
                 if weighted_sum is not None:
+                    # Ensure weighted_sum is a numpy array (handles scalars like num_batches_tracked)
+                    if not isinstance(weighted_sum, np.ndarray):
+                        weighted_sum = np.array(weighted_sum)
                     updated_bn_statistics[key] = Array.from_numpy_ndarray(weighted_sum)
                 elif self.server_bn_statistics and key in self.server_bn_statistics:
                     updated_bn_statistics[key] = self.server_bn_statistics[key]
