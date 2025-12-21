@@ -230,7 +230,7 @@ class CustomFedSiloBN(CustomFedAvg):
             
             for client_arrays, weight in zip(client_arrays_list, normalized_weights):
                 param_array = client_arrays[key]
-                param_np = Array.to_numpy_ndarray(param_array)
+                param_np = Array.numpy(param_array)
                 
                 if weighted_sum is None:
                     weighted_sum = weight * param_np
@@ -250,7 +250,7 @@ class CustomFedSiloBN(CustomFedAvg):
                 for client_arrays, weight in zip(client_arrays_list, normalized_weights):
                     if key in client_arrays.keys():
                         param_array = client_arrays[key]
-                        param_np = Array.to_numpy_ndarray(param_array)
+                        param_np = Array.numpy(param_array)
                         
                         if weighted_sum is None:
                             weighted_sum = weight * param_np
