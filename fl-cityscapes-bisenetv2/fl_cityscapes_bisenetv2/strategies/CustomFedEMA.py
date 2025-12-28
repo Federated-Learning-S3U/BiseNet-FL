@@ -81,6 +81,11 @@ class CustomFedEMA(CustomFedAvg):
                 for old, agg in zip(old_ndarrays, agg_ndarrays, strict=True)
             ]
 
+            # Check for potential explosion
+            max_weight = max([np.max(np.abs(arr)) for arr in new_ndarrays])
+            mean_weight = np.mean([np.mean(np.abs(arr)) for arr in new_ndarrays])
+            log(INFO, f"FedEMA (beta={beta}): Updated global model. Max weight: {max_weight:.4f}, Mean weight: {mean_weight:.4f}")
+
             # Convert back to ArrayRecord
             array_keys = list(aggregated_arrays.keys())
             aggregated_arrays = ArrayRecord(

@@ -28,7 +28,8 @@ def train(net, trainloader, epochs, lr, wd, device, num_aux_heads, strategy, pro
 
     net.to(device)
     criterion_pre = OhemCELoss(0.7, device=device)
-    criterion_aux = [OhemCELoss(0.7, device=device) for _ in range(num_aux_heads)]
+    criterion_aux = [OhemCELoss(0.7, device=device)
+                     for _ in range(num_aux_heads)]
 
     optimizer = set_optimizer(net, lr_start=lr, weight_decay=wd)
 
@@ -61,6 +62,15 @@ def train(net, trainloader, epochs, lr, wd, device, num_aux_heads, strategy, pro
                     loss += (prox_mu / 2) * proximal_term
 
             scaler.scale(loss).backward()
+
+            # Check for gradient explosion
+            scaler.unscale_(optimizer)
+            grad_norm = torch.nn.utils.clip_grad_norm_(
+                net.parameters(), max_norm=100.0)
+            print("Checking gradient norm:", grad_norm.item())
+            if grad_norm > 50.0:
+                print(f"Warning: High gradient norm: {grad_norm:.4f}")
+
             scaler.step(optimizer)
             scaler.update()
 
@@ -191,7 +201,8 @@ def make_central_evaluate(context: Context):
         torch.save(state_dict, save_latest)
         with open(latest_metric_file, "w") as f:
             json.dump(
-                {"mIoU": metrics["mIoU"], "round": rounds_trained + server_round},
+                {"mIoU": metrics["mIoU"],
+                    "round": rounds_trained + server_round},
                 f,
                 indent=4,
             )
