@@ -74,22 +74,48 @@ class CustomFedEMA(CustomFedAvg):
             old_ndarrays = self.current_arrays.to_numpy_ndarrays()
             agg_ndarrays = aggregated_arrays.to_numpy_ndarrays()
 
-            # Apply EMA: theta_new = beta * theta_old + (1 - beta) * theta_agg
+            # Apply EMA only to non-BatchNorm buffers
+            # Keep BN running statistics (running_mean, running_var, num_batches_tracked)
+            # as they were in the previous global model.
             beta = self.server_momentum
-            new_ndarrays = [
-                np.array(beta * old + (1 - beta) * agg)
-                for old, agg in zip(old_ndarrays, agg_ndarrays, strict=True)
-            ]
+            array_keys = list(aggregated_arrays.keys())
+            new_ndarrays = []
+            for key, old, agg in zip(
+                array_keys, old_ndarrays, agg_ndarrays, strict=True
+            ):
+                if (
+                    "running_mean" in key
+                    or "running_var" in key
+                    or "num_batches_tracked" in key
+                ):
+                    # Skip EMA for BN statistics: keep previous global value
+                    print(f"FedEMA: Keeping BN buffer '{key}' unchanged.")
+                    new_ndarrays.append(old)
+                else:
+                    # Standard EMA update for trainable parameters
+                    print(f"FedEMA: Updating parameter '{key}' with EMA.")
+                    new_ndarrays.append(
+                        np.array(beta * old + (1 - beta) * agg))
 
-            # Check for potential explosion
+            # Check for potential explosion (on all updated tensors)
             max_weight = max([np.max(np.abs(arr)) for arr in new_ndarrays])
-            mean_weight = np.mean([np.mean(np.abs(arr)) for arr in new_ndarrays])
-            log(INFO, f"FedEMA (beta={beta}): Updated global model. Max weight: {max_weight:.4f}, Mean weight: {mean_weight:.4f}")
+            mean_weight = np.mean([np.mean(np.abs(arr))
+                                  for arr in new_ndarrays])
+            log(
+                INFO,
+                f"FedEMA (beta={beta}): Updated global model. Max weight: {max_weight:.4f}, Mean weight: {mean_weight:.4f}",
+            )
 
             # Convert back to ArrayRecord
-            array_keys = list(aggregated_arrays.keys())
             aggregated_arrays = ArrayRecord(
-                dict(zip(array_keys, [Array.from_numpy_ndarray(arr) for arr in new_ndarrays], strict=True))
+                dict(
+                    zip(
+                        array_keys,
+                        [Array.from_numpy_ndarray(arr)
+                         for arr in new_ndarrays],
+                        strict=True,
+                    )
+                )
             )
 
             # Update current arrays
