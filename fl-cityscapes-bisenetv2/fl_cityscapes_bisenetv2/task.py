@@ -67,7 +67,6 @@ def train(net, trainloader, epochs, lr, wd, device, num_aux_heads, strategy, pro
             scaler.unscale_(optimizer)
             grad_norm = torch.nn.utils.clip_grad_norm_(
                 net.parameters(), max_norm=100.0)
-            print("Checking gradient norm:", grad_norm.item())
             if grad_norm > 50.0:
                 print(f"Warning: High gradient norm: {grad_norm:.4f}")
 
