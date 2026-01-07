@@ -9,6 +9,11 @@ from flwr.clientapp import ClientApp
 
 from fl_cityscapes_bisenetv2.data_preparation.datasets import load_client_train_data
 from fl_cityscapes_bisenetv2.task import train as train_fn
+from fl_cityscapes_bisenetv2.utils.bn_utils import (
+    filter_bn_statistics,
+    extract_bn_statistics,
+    merge_with_local_bn_stats,
+)
 
 from lib.models import BiSeNetV2
 
@@ -35,10 +40,31 @@ def train(msg: Message, context: Context):
 
     scales: list = json.loads(context.run_config["scales"])
     cropsize: list = json.loads(context.run_config["cropsize"])
+    
+    strategy_name: str = context.run_config["strategy-name"]
 
     # Load the model and initialize it with the received weights
     model = BiSeNetV2(num_classes)
-    model.load_state_dict(msg.content["arrays"].to_torch_state_dict())
+    
+    # For SiloBN: merge server params with local BN statistics
+    # On first round, we don't have local BN stats yet, so just load server params
+    server_state_dict = msg.content["arrays"].to_torch_state_dict()
+    
+    if strategy_name == "FedSiloBN":
+        # Check if we have local BN statistics stored from previous round
+        local_bn_stats = context.state.get("local_bn_statistics", None)
+        if local_bn_stats is not None:
+            # Merge server learnable params with our local BN statistics
+            merged_state_dict = merge_with_local_bn_stats(
+                server_state_dict, local_bn_stats
+            )
+            model.load_state_dict(merged_state_dict)
+        else:
+            # First round: use server params as-is (includes initial BN stats)
+            model.load_state_dict(server_state_dict)
+    else:
+        model.load_state_dict(server_state_dict)
+    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
@@ -60,14 +86,27 @@ def train(msg: Message, context: Context):
         wd=weight_decay,
         device=device,
         num_aux_heads=num_aux_heads,
-        strategy=context.run_config["strategy-name"],
+        strategy=strategy_name,
         prox_mu=prox_mu,
     )
 
     model.cpu()
     cpu_state_dict = {k: v.cpu() for k, v in model.state_dict().items()}
 
-    model_record = ArrayRecord(cpu_state_dict)
+    # For SiloBN: filter out BN statistics before sending to server
+    # and store local BN statistics for next round
+    if strategy_name == "FedSiloBN":
+        # Store local BN statistics in context state for next round
+        local_bn_stats = extract_bn_statistics(cpu_state_dict)
+        context.state["local_bn_statistics"] = local_bn_stats
+        print(f"[Client {partition_id}] SiloBN: Stored {len(local_bn_stats)} local BN statistics")
+        
+        # Filter out BN statistics before sending to server
+        filtered_state_dict = filter_bn_statistics(cpu_state_dict)
+        print(f"[Client {partition_id}] SiloBN: Sending {len(filtered_state_dict)} learnable params to server")
+        model_record = ArrayRecord(filtered_state_dict)
+    else:
+        model_record = ArrayRecord(cpu_state_dict)
 
     metrics = {
         "train_loss": train_loss,
