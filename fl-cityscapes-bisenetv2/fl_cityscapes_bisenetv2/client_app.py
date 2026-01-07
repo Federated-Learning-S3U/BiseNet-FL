@@ -52,8 +52,10 @@ def train(msg: Message, context: Context):
     
     if strategy_name == "FedSiloBN":
         # Check if we have local BN statistics stored from previous round
-        local_bn_stats = context.state.get("local_bn_statistics", None)
-        if local_bn_stats is not None:
+        local_bn_record = context.state.get("local_bn_statistics", None)
+        if local_bn_record is not None:
+            # Convert ArrayRecord back to dict for merging
+            local_bn_stats = local_bn_record.to_torch_state_dict()
             # Merge server learnable params with our local BN statistics
             merged_state_dict = merge_with_local_bn_stats(
                 server_state_dict, local_bn_stats
@@ -97,8 +99,9 @@ def train(msg: Message, context: Context):
     # and store local BN statistics for next round
     if strategy_name == "FedSiloBN":
         # Store local BN statistics in context state for next round
+        # Must wrap in ArrayRecord since context.state only accepts Record types
         local_bn_stats = extract_bn_statistics(cpu_state_dict)
-        context.state["local_bn_statistics"] = local_bn_stats
+        context.state["local_bn_statistics"] = ArrayRecord(local_bn_stats)
         print(f"[Client {partition_id}] SiloBN: Stored {len(local_bn_stats)} local BN statistics")
         
         # Filter out BN statistics before sending to server
