@@ -47,7 +47,6 @@ def train(msg: Message, context: Context):
     model = BiSeNetV2(num_classes)
     
     # For SiloBN: merge server params with local BN statistics
-    # On first round, we don't have local BN stats yet, so just load server params
     server_state_dict = msg.content["arrays"].to_torch_state_dict()
     
     if strategy_name == "FedSiloBN":
@@ -62,8 +61,12 @@ def train(msg: Message, context: Context):
             )
             model.load_state_dict(merged_state_dict)
         else:
-            # First round: use server params as-is (includes initial BN stats)
-            model.load_state_dict(server_state_dict)
+            # First participation for this client - no local BN stats yet
+            # Server may send full params (round 1) or only learnable params (round 2+)
+            # Use model's default BN stats and load server params with strict=False
+            # This handles both cases: full state dict or learnable-only state dict
+            model.load_state_dict(server_state_dict, strict=False)
+            print(f"[SiloBN] First participation - using model's default BN statistics")
     else:
         model.load_state_dict(server_state_dict)
     
