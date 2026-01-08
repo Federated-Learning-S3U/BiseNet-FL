@@ -130,6 +130,7 @@ def make_central_evaluate(context: Context):
     best_metric_file = context.run_config["best-metric"]
     latest_metric_file = context.run_config["latest-metric"]
     client_data_partition = context.run_config["client-data-partition"]
+    strategy_name = context.run_config["strategy-name"]
 
     data_mean, data_std = aggregate_client_metrics(client_data_partition)
     data_metrics = {"mean": data_mean, "std": data_std}
@@ -159,7 +160,17 @@ def make_central_evaluate(context: Context):
         # Load Global Model
         model = BiSeNetV2(num_classes).cpu()
         sd = arrays.to_torch_state_dict()
-        model.load_state_dict(sd, strict=True)
+        
+        # For SiloBN: server only has learnable params, not BN statistics
+        # Use strict=False to allow missing BN stats (model uses default initialized values)
+        # Note: In SiloBN, BN statistics are siloed on clients, so server evaluation
+        # uses the model's default BN statistics (mean=0, var=1). This is expected
+        # behavior and provides an approximate evaluation of the global model.
+        if strategy_name == "FedSiloBN":
+            model.load_state_dict(sd, strict=False)
+            print(f"[SiloBN Eval] Using model's default BN statistics for server evaluation")
+        else:
+            model.load_state_dict(sd, strict=True)
 
         # Load the entire Cityscapes val dataset
         eval_loader = load_server_eval_data(
