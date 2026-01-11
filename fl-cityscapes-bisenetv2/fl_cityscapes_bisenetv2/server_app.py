@@ -6,7 +6,7 @@ from flwr.serverapp import Grid, ServerApp
 
 from lib.models import BiSeNetV2
 
-from fl_cityscapes_bisenetv2.task import make_central_evaluate
+from fl_cityscapes_bisenetv2.task import make_central_evaluate, make_silobn_evaluate_aggregator
 from fl_cityscapes_bisenetv2.strategies import (
     CustomFedAvg,
     CustomFedProx,
@@ -53,9 +53,9 @@ def main(grid: Grid, context: Context) -> None:
     elif strategy_name == "FedEMA":
         strategy_params["server_momentum"] = context.run_config["server-momentum"]
     elif strategy_name == "FedSiloBN":
-        # FedSiloBN doesn't require additional parameters
-        # BN layers are automatically excluded from aggregation
-        pass
+        # FedSiloBN uses client-side evaluation
+        # Pass the evaluation aggregator to the strategy
+        strategy_params["silobn_eval_aggregator"] = make_silobn_evaluate_aggregator(context)
 
     # Load global model
     global_model = BiSeNetV2(num_classes)
@@ -76,10 +76,16 @@ def main(grid: Grid, context: Context) -> None:
     # Create central evaluation function that accepts context as an argument
     evaluate_fn = make_central_evaluate(context)
 
+    # For SiloBN: enable client-side evaluation
+    fraction_evaluate = 0.0
+    if strategy_name == "FedSiloBN":
+        fraction_evaluate = 1.0  # Evaluate on all participating clients
+        print(f"[Server] SiloBN: Client-side evaluation enabled (fraction_evaluate={fraction_evaluate})")
+
     # Initialize Custom strategy
     strategy = eval(custom_strategy_name)(
         fraction_train=fraction_train,
-        fraction_evaluate=0.0,
+        fraction_evaluate=fraction_evaluate,
         lr_schedule_file=lr_schedule_file,
         lr_decay_factor=lr_decay_factor,
         lr_decay_rounds=lr_decay_rounds,

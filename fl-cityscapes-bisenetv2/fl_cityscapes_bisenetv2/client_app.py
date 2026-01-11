@@ -138,56 +138,73 @@ def train(msg: Message, context: Context):
     return Message(content=content, reply_to=msg)
 
 
-# @app.evaluate() # TODO: Add evaluation function per client
-# def evaluate(msg: Message, context: Context):
-#     """Evaluate the model on local data."""
+@app.evaluate()
+def evaluate(msg: Message, context: Context):
+    """Evaluate the model on local data (used for SiloBN client-side evaluation)."""
+    from fl_cityscapes_bisenetv2.task import test as test_fn
+    from fl_cityscapes_bisenetv2.data_preparation.datasets import load_server_eval_data
+    from fl_cityscapes_bisenetv2.data_preparation.utils import aggregate_client_metrics
 
-#     # Read run config
-#     num_rounds: int = context.run_config["num-server-rounds"]
-#     fraction_train: float = context.run_config["fraction-train"]
+    # Read run config
+    eval_batch_size: int = context.run_config["eval-batch-size"]
+    im_root: str = context.run_config["im-root"]
+    server_data_partition: str = context.run_config["server-data-partition"]
+    client_data_partition: str = context.run_config["client-data-partition"]
+    num_classes: int = context.run_config["num-classes"]
+    lb_ignore: int = context.run_config["lb-ignore"]
+    strategy_name: str = context.run_config["strategy-name"]
 
-#     local_epochs: int = context.run_config["local-epochs"]
-#     batch_size: int = context.run_config["batch-size"]
+    partition_id = context.node_config["partition-id"]
 
-#     im_root: str = context.run_config["im-root"]
-#     client_data_partition: str = context.run_config["client-data-partition"]
+    # Load the model
+    model = BiSeNetV2(num_classes)
+    server_state_dict = msg.content["arrays"].to_torch_state_dict()
 
-#     num_classes: int = context.run_config["num-classes"]
+    # For SiloBN: merge server params with local BN statistics
+    if strategy_name == "FedSiloBN":
+        local_bn_record = context.state.get("local_bn_statistics", None)
+        if local_bn_record is not None:
+            local_bn_stats = local_bn_record.to_torch_state_dict()
+            merged_state_dict = merge_with_local_bn_stats(
+                server_state_dict, local_bn_stats
+            )
+            model.load_state_dict(merged_state_dict)
+            print(f"[Client {partition_id}] SiloBN Eval: Using local BN statistics")
+        else:
+            # First eval - no local BN stats, use default
+            model.load_state_dict(server_state_dict, strict=False)
+            print(f"[Client {partition_id}] SiloBN Eval: Using default BN statistics (first eval)")
+    else:
+        model.load_state_dict(server_state_dict)
 
-#     lr: float = context.run_config["lr"]
-#     weight_decay: float = context.run_config["weight-decay"]
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
 
-#     num_aux_heads: int = context.run_config["num-aux-heads"]
+    # Load the server eval data (full validation set)
+    data_mean, data_std = aggregate_client_metrics(client_data_partition)
+    data_metrics = {"mean": data_mean, "std": data_std}
 
-#     scales: list = context.run_config["scales"]
-#     cropsize: list = context.run_config["cropsize"]
+    eval_loader = load_server_eval_data(
+        data_root=im_root,
+        data_file=server_data_partition,
+        normalization_metrics=data_metrics,
+        batch_size=eval_batch_size,
+    )
 
-#     save_path: str = context.run_config["respth"]
+    # Evaluate the model
+    metrics = test_fn(model, eval_loader, device, num_classes, lb_ignore)
+    print(f"[Client {partition_id}] Evaluation completed. mIoU: {metrics.get('mIoU', 0.0):.4f}")
 
-#     # Load the model and initialize it with the received weights
-#     model = BiSeNetV2(num_classes)
-#     model.load_state_dict(msg.content["arrays"].to_torch_state_dict())
-#     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-#     model.to(device)
+    # Clean up
+    model.cpu()
+    del model
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
 
-#     # Load the data
-#     partition_id = context.node_config["partition-id"]
-#     num_partitions = context.node_config["num-partitions"]
-#     _, valloader = load_data(partition_id, num_partitions)
-
-#     # Call the evaluation function
-#     eval_loss, eval_acc = test_fn(
-#         model,
-#         valloader,
-#         device,
-#     )
-
-#     # Construct and return reply Message
-#     metrics = {
-#         "eval_loss": eval_loss,
-#         "eval_acc": eval_acc,
-#         "num-examples": len(valloader.dataset),
-#     }
-#     metric_record = MetricRecord(metrics)
-#     content = RecordDict({"metrics": metric_record})
-#     return Message(content=content, reply_to=msg)
+    # Construct and return reply Message
+    metrics["num-examples"] = len(eval_loader.dataset)
+    metric_record = MetricRecord(metrics)
+    content = RecordDict({"metrics": metric_record})
+    return Message(content=content, reply_to=msg)

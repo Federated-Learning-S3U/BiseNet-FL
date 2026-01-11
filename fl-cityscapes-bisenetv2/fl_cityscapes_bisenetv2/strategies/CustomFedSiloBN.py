@@ -11,6 +11,7 @@ Key Implementation Details:
 - Client-side: Filters out BN statistics before sending to server
 - Server-side: Only receives and aggregates learnable parameters
 - Client maintains local BN statistics across rounds
+- Evaluation is performed on clients (with their local BN stats) and aggregated
 
 Reference:
     Andreux, M., du Terrail, J. O., Beguier, C., & Tramel, E. W. (2020).
@@ -20,7 +21,7 @@ Reference:
 """
 
 from logging import INFO
-from typing import Iterable
+from typing import Iterable, Callable, Optional
 import numpy as np
 
 from flwr.serverapp import Grid
@@ -80,10 +81,14 @@ class CustomFedSiloBN(CustomFedAvg):
     Clients MUST use `filter_bn_statistics_for_server()` before sending parameters
     to ensure BN statistics are not transmitted.
     
+    EVALUATION: Since the server doesn't have BN statistics, evaluation is performed
+    on clients (using their local BN stats) and the results are aggregated here.
+    
     Key features:
     - Learnable parameters (Conv, FC, BN gamma/beta): Aggregated using weighted averaging
     - BN statistics (running_mean, running_var): NEVER leave the client
     - Server has NO knowledge of client BN statistics
+    - Evaluation happens on clients, results are aggregated on server
     
     What gets aggregated (sent to server):
     - All convolutional layer weights and biases
@@ -99,9 +104,15 @@ class CustomFedSiloBN(CustomFedAvg):
     
     def __init__(
         self,
+        silobn_eval_aggregator: Optional[Callable] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
+        # Store the evaluation aggregator for SiloBN client-side evaluation
+        self.silobn_eval_aggregator = silobn_eval_aggregator
+        # Store the current server arrays for evaluation aggregation
+        self._current_arrays: Optional[ArrayRecord] = None
+        self._current_round: int = 0
     
     def summary(self) -> None:
         """Log summary configuration of the strategy."""
@@ -109,6 +120,7 @@ class CustomFedSiloBN(CustomFedAvg):
         log(INFO, "\t│\t└── BN statistics (running_mean/var): Siloed (never leave client)")
         log(INFO, "\t│\t└── BN gamma/beta: Aggregated (learnable)")
         log(INFO, "\t│\t└── Non-BN layers: Aggregated (FedAvg)")
+        log(INFO, "\t│\t└── Evaluation: Client-side with aggregation")
         log(INFO, "\t│\t└── Note: Clients must filter BN stats before sending")
         super().summary()
     
@@ -255,3 +267,113 @@ class CustomFedSiloBN(CustomFedAvg):
             "train_loss": avg_loss,
             "num-examples": total_examples,
         })
+
+    def configure_evaluate(
+        self, server_round: int, arrays: ArrayRecord, config: ConfigRecord, grid: Grid
+    ) -> Iterable[Message]:
+        """
+        Configure client-side evaluation for SiloBN.
+        
+        In SiloBN, evaluation must happen on clients because:
+        1. Server doesn't have BN statistics (they're siloed)
+        2. Each client has its own local BN statistics
+        3. Using default BN stats (mean=0, var=1) on server gives inaccurate results
+        
+        This method sends the aggregated learnable parameters to clients for evaluation.
+        Each client will merge these with their local BN statistics before evaluating.
+        """
+        # Store current arrays and round for use in aggregate_evaluate
+        self._current_arrays = arrays
+        self._current_round = server_round
+        
+        log(INFO, f"[SiloBN] Round {server_round}: Configuring client-side evaluation")
+        log(INFO, f"[SiloBN] Clients will evaluate using their local BN statistics")
+        
+        # Call parent to configure evaluation messages
+        return super().configure_evaluate(server_round, arrays, config, grid)
+    
+    def aggregate_evaluate(
+        self,
+        server_round: int,
+        replies: Iterable[Message],
+    ) -> tuple[ArrayRecord | None, MetricRecord | None]:
+        """
+        Aggregate evaluation results from all clients.
+        
+        In SiloBN, since each client evaluates with its own BN statistics,
+        we aggregate their results (weighted by number of examples) to get
+        a representative evaluation of the global model.
+        
+        This provides a more accurate evaluation than using default BN stats
+        on the server.
+        """
+        replies_list = list(replies)
+        
+        if not replies_list:
+            log(INFO, f"[SiloBN] Round {server_round}: No evaluation replies received")
+            return None, None
+        
+        # Collect evaluation metrics from all clients
+        client_metrics = []
+        
+        for reply in replies_list:
+            if reply.has_error():
+                continue
+            
+            metrics = reply.content.get("metrics")
+            if metrics is None:
+                continue
+            
+            # Convert MetricRecord to dict if needed
+            if hasattr(metrics, 'items'):
+                metrics_dict = dict(metrics.items())
+            else:
+                metrics_dict = dict(metrics)
+            
+            client_metrics.append(metrics_dict)
+        
+        if not client_metrics:
+            log(INFO, f"[SiloBN] Round {server_round}: No valid evaluation metrics received")
+            return None, None
+        
+        log(INFO, f"[SiloBN] Round {server_round}: Aggregating evaluation results from {len(client_metrics)} clients")
+        
+        # Use the evaluation aggregator if available
+        if self.silobn_eval_aggregator is not None and self._current_arrays is not None:
+            aggregated_metrics = self.silobn_eval_aggregator(
+                server_round,
+                self._current_arrays,
+                client_metrics,
+            )
+            return None, aggregated_metrics
+        
+        # Fallback: simple weighted averaging
+        total_examples = 0
+        weighted_miou = 0.0
+        weighted_loss = 0.0
+        
+        for metrics in client_metrics:
+            num_examples = metrics.get("num-examples", 1)
+            miou = metrics.get("mIoU", 0.0)
+            val_loss = metrics.get("val_loss", 0.0)
+            
+            total_examples += num_examples
+            weighted_miou += miou * num_examples
+            weighted_loss += val_loss * num_examples
+        
+        if total_examples == 0:
+            return None, None
+        
+        avg_miou = weighted_miou / total_examples
+        avg_loss = weighted_loss / total_examples
+        
+        log(INFO, f"[SiloBN] Round {server_round}: Aggregated mIoU = {avg_miou:.4f}")
+        
+        aggregated_metrics = MetricRecord({
+            "mIoU": avg_miou,
+            "val_loss": avg_loss,
+            "num-examples": total_examples,
+            "num-clients": len(client_metrics),
+        })
+        
+        return None, aggregated_metrics
