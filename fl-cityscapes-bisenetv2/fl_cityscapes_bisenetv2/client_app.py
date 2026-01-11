@@ -36,6 +36,8 @@ def train(msg: Message, context: Context):
     scales: list = json.loads(context.run_config["scales"])
     cropsize: list = json.loads(context.run_config["cropsize"])
 
+    neg_entropy_weight: float = context.run_config.get("neg-entropy-weight", 0.0)
+
     # Load the model and initialize it with the received weights
     model = BiSeNetV2(num_classes)
     model.load_state_dict(msg.content["arrays"].to_torch_state_dict())
@@ -62,6 +64,7 @@ def train(msg: Message, context: Context):
         num_aux_heads=num_aux_heads,
         strategy=context.run_config["strategy-name"],
         prox_mu=prox_mu,
+        neg_entropy_weight=neg_entropy_weight,
     )
 
     model.cpu()

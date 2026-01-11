@@ -75,6 +75,9 @@ lr-decay-factor = 0.95
 lr-decay-rounds = 10
 lr-schedule-file = "./res/lr_schedule.json"
 
+# Regularization Configs
+neg-entropy-weight = 0.001
+
 # Model Configs
 num-classes = 19
 lb-ignore = 255

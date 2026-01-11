@@ -19,7 +19,18 @@ from fl_cityscapes_bisenetv2.utils.model_utils import set_optimizer
 from fl_cityscapes_bisenetv2.data_preparation.utils import aggregate_client_metrics
 
 
-def train(net, trainloader, epochs, lr, wd, device, num_aux_heads, strategy, prox_mu):
+def train(
+    net,
+    trainloader,
+    epochs,
+    lr,
+    wd,
+    device,
+    num_aux_heads,
+    strategy,
+    prox_mu,
+    neg_entropy_weight: float = 0.0,
+):
     """Train the model on the training set."""
     global_weights = None
     if strategy == "FedProx":
@@ -60,6 +71,14 @@ def train(net, trainloader, epochs, lr, wd, device, num_aux_heads, strategy, pro
                     for w, w_t in zip(local_weights, global_weights):
                         proximal_term += (w - w_t).norm(2)
                     loss += (prox_mu / 2) * proximal_term
+
+                # Negative-entropy regularization (encourages confident predictions)
+                if neg_entropy_weight > 0.0:
+                    probs = torch.softmax(logits, dim=1)
+                    log_probs = torch.log_softmax(logits, dim=1)
+                    # Average negative entropy over batch and pixels
+                    neg_entropy = (probs * log_probs).sum(dim=1).mean()
+                    loss = loss + neg_entropy_weight * neg_entropy
 
             scaler.scale(loss).backward()
 
