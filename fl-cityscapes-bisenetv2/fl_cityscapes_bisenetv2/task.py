@@ -63,13 +63,6 @@ def train(net, trainloader, epochs, lr, wd, device, num_aux_heads, strategy, pro
 
             scaler.scale(loss).backward()
 
-            # Check for gradient explosion
-            scaler.unscale_(optimizer)
-            grad_norm = torch.nn.utils.clip_grad_norm_(
-                net.parameters(), max_norm=100.0)
-            if grad_norm > 50.0:
-                print(f"Warning: High gradient norm: {grad_norm:.4f}")
-
             scaler.step(optimizer)
             scaler.update()
 

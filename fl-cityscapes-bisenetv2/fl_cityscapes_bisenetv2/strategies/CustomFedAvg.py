@@ -5,8 +5,7 @@ import numpy as np
 
 from flwr.serverapp import Grid
 from flwr.serverapp.strategy import FedAvg
-from flwr.app import ArrayRecord, ConfigRecord, Message, MetricRecord
-from flwr.common import log
+from flwr.app import ArrayRecord, ConfigRecord, Message
 
 
 class CustomFedAvg(FedAvg):
@@ -36,28 +35,3 @@ class CustomFedAvg(FedAvg):
 
         # Pass the updated config and the rest of arguments to the parent class
         return super().configure_train(server_round, arrays, config, grid)
-
-    def aggregate_train(
-        self,
-        server_round: int,
-        replies: Iterable[Message],
-    ) -> tuple[ArrayRecord | None, MetricRecord | None]:
-        """Aggregate ArrayRecords and log weight statistics."""
-
-        # Call FedAvg aggregate_train to perform standard aggregation
-        aggregated_arrays, aggregated_metrics = super().aggregate_train(
-            server_round, replies
-        )
-
-        if aggregated_arrays is not None:
-            # Convert to numpy for statistics
-            agg_ndarrays = aggregated_arrays.to_numpy_ndarrays()
-
-            # Check for potential explosion
-            max_weight = max([np.max(np.abs(arr)) for arr in agg_ndarrays])
-            mean_weight = np.mean([np.mean(np.abs(arr))
-                                  for arr in agg_ndarrays])
-            log(INFO,
-                f"FedAvg: Updated global model. Max weight: {max_weight:.4f}, Mean weight: {mean_weight:.4f}")
-
-        return aggregated_arrays, aggregated_metrics
