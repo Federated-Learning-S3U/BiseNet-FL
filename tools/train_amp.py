@@ -103,12 +103,14 @@ def set_optimizer(model):
 
 
 def set_model_dist(net):
+    # Only wrap with DistributedDataParallel when torch.distributed is initialized.
+    # This allows running the script in single-process mode without torchrun.
+    if not dist.is_initialized():
+        return net
     local_rank = int(os.environ.get("LOCAL_RANK", "0"))
     net = nn.parallel.DistributedDataParallel(
         net,
-        device_ids=[
-            local_rank,
-        ],
+        device_ids=[local_rank],
         #  find_unused_parameters=True,
         output_device=local_rank,
     )
@@ -119,10 +121,17 @@ def set_meters():
     time_meter = TimeMeter(cfg.max_iter)
     loss_meter = AvgMeter("loss")
     loss_pre_meter = AvgMeter("loss_prem")
+    loss_final_head_meter = AvgMeter("loss_final_head")
     loss_aux_meters = [
         AvgMeter("loss_aux{}".format(i)) for i in range(cfg.num_aux_heads)
     ]
-    return time_meter, loss_meter, loss_pre_meter, loss_aux_meters
+    return (
+        time_meter,
+        loss_meter,
+        loss_pre_meter,
+        loss_final_head_meter,
+        loss_aux_meters,
+    )
 
 
 def train():
@@ -180,7 +189,9 @@ def train():
     net = set_model_dist(net)
 
     ## meters
-    time_meter, loss_meter, loss_pre_meter, loss_aux_meters = set_meters()
+    time_meter, loss_meter, loss_pre_meter, loss_final_head_meter, loss_aux_meters = (
+        set_meters()
+    )
 
     ## lr scheduler
     lr_schdr = WarmupPolyLrScheduler(
@@ -207,8 +218,34 @@ def train():
     eval_every_iters = int(train_iters_per_epoch * eval_every_epochs)
 
     best_val_miou = -1.0
+    start_iter = 0
+    patience_counter = 0
 
-    for it, (im, lb) in enumerate(dl):
+    # Resume from checkpoint if provided
+    resume_from = cfg.get("resume_from", None)
+    if resume_from is not None and osp.exists(resume_from):
+        logger.info(f"Resuming from checkpoint: {resume_from}")
+        ckpt = torch.load(resume_from, map_location="cpu")
+        if "start_iter" in ckpt:
+            start_iter = ckpt["start_iter"]
+            logger.info(f"Starting from iteration {start_iter}")
+        if "best_val_miou" in ckpt:
+            best_val_miou = ckpt["best_val_miou"]
+            logger.info(f"Previous best mIoU: {best_val_miou:.6f}")
+        if "optimizer_state" in ckpt:
+            optim.load_state_dict(ckpt["optimizer_state"])
+            logger.info("Restored optimizer state")
+        if "scaler_state" in ckpt:
+            scaler.load_state_dict(ckpt["scaler_state"])
+            logger.info("Restored scaler state")
+        if "scheduler_state" in ckpt:
+            lr_schdr.load_state_dict(ckpt["scheduler_state"])
+            logger.info("Restored scheduler state")
+        if "patience_counter" in ckpt:
+            patience_counter = ckpt["patience_counter"]
+            logger.info(f"Restored patience counter: {patience_counter}")
+
+    for it, (im, lb) in enumerate(dl, start=start_iter):
         im = im.cuda()
         lb = lb.cuda()
 
@@ -230,6 +267,7 @@ def train():
         time_meter.update()
         loss_meter.update(loss.item())
         loss_pre_meter.update(loss_pre.item())
+        loss_final_head_meter.update(loss_pre.item())
         _ = [mter.update(lss.item()) for mter, lss in zip(loss_aux_meters, loss_aux)]
 
         ## print training log message
@@ -274,19 +312,65 @@ def train():
                     "\n" + tabulate(iou_content, headers=iou_heads, tablefmt="orgtbl")
                 )
 
-                # save last checkpoint
+                # save last checkpoint with training state
                 last_pth = osp.join(cfg.respth, f"model_iter_{it+1}_last.pth")
-                torch.save(net.module.state_dict(), last_pth)
-                logger.info(f"saved last model to {last_pth}")
+                checkpoint = {
+                    "model_state": net.module.state_dict(),
+                    "optimizer_state": optim.state_dict(),
+                    "scaler_state": scaler.state_dict(),
+                    "scheduler_state": lr_schdr.state_dict(),
+                    "start_iter": it + 1,
+                    "best_val_miou": best_val_miou,
+                    "patience_counter": patience_counter,
+                }
+                torch.save(checkpoint, last_pth)
+                logger.info(f"saved last checkpoint to {last_pth}")
 
                 # save best checkpoint based on validation miou
                 if cur_miou is not None and cur_miou > best_val_miou:
                     best_val_miou = cur_miou
+                    patience_counter = 0
                     best_pth = osp.join(cfg.respth, "model_best.pth")
-                    torch.save(net.module.state_dict(), best_pth)
+                    best_checkpoint = {
+                        "model_state": net.module.state_dict(),
+                        "optimizer_state": optim.state_dict(),
+                        "scaler_state": scaler.state_dict(),
+                        "scheduler_state": lr_schdr.state_dict(),
+                        "start_iter": it + 1,
+                        "best_val_miou": best_val_miou,
+                        "patience_counter": patience_counter,
+                    }
+                    torch.save(best_checkpoint, best_pth)
                     logger.info(
                         f"new best miou {best_val_miou:.6f} saved to {best_pth}"
                     )
+                else:
+                    early_stop_patience = cfg.get("early_stop_patience", 0)
+                    if early_stop_patience > 0:
+                        patience_counter += 1
+                        logger.info(
+                            f"No improvement. Patience: {patience_counter}/{early_stop_patience}"
+                        )
+                        if patience_counter >= early_stop_patience:
+                            logger.info(f"Early stopping triggered at iteration {it+1}")
+                            # Save early stop checkpoint
+                            early_stop_pth = osp.join(
+                                cfg.respth, "model_early_stop.pth"
+                            )
+                            early_stop_checkpoint = {
+                                "model_state": net.module.state_dict(),
+                                "optimizer_state": optim.state_dict(),
+                                "scaler_state": scaler.state_dict(),
+                                "scheduler_state": lr_schdr.state_dict(),
+                                "start_iter": it + 1,
+                                "best_val_miou": best_val_miou,
+                                "patience_counter": patience_counter,
+                            }
+                            torch.save(early_stop_checkpoint, early_stop_pth)
+                            logger.info(f"Early stop model saved to {early_stop_pth}")
+                            net.train()
+                            torch.cuda.empty_cache()
+                            return
 
             # restore train mode
             net.train()
@@ -337,7 +421,12 @@ def train():
 def main():
     local_rank = int(os.environ.get("LOCAL_RANK", "0"))
     torch.cuda.set_device(local_rank)
-    dist.init_process_group(backend="nccl")
+    # Initialize process group only if launched with torch.distributed (torchrun)
+    # Expect environment variables like RANK/WORLD_SIZE when running distributed.
+    if ("RANK" in os.environ) or (
+        "WORLD_SIZE" in os.environ and int(os.environ.get("WORLD_SIZE", "1")) > 1
+    ):
+        dist.init_process_group(backend="nccl")
 
     if not osp.exists(cfg.respth):
         os.makedirs(cfg.respth)
