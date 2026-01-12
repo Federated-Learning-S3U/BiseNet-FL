@@ -47,6 +47,7 @@ class CustomFedEMA(CustomFedAvg):
         """Log summary configuration of the strategy."""
         log(INFO, "\t├──> FedEMA settings:")
         log(INFO, "\t│\t└── Server Momentum (beta): %s", self.server_momentum)
+        log(INFO, "\t│\t└── Negative Entropy Weight: %s", self.neg_entropy_weight)
         super().summary()
 
     def configure_train(
