@@ -36,8 +36,6 @@ def train(msg: Message, context: Context):
     scales: list = json.loads(context.run_config["scales"])
     cropsize: list = json.loads(context.run_config["cropsize"])
 
-    neg_entropy_weight: float = context.run_config.get("neg-entropy-weight", 0.0)
-
     # Load the model and initialize it with the received weights
     model = BiSeNetV2(num_classes)
     model.load_state_dict(msg.content["arrays"].to_torch_state_dict())
@@ -53,6 +51,7 @@ def train(msg: Message, context: Context):
 
     # Call the training function
     prox_mu = msg.content["config"].get("proximal-mu", 0.0)
+    neg_entropy_weight = msg.content["config"].get("neg-entropy-weight", 0.0)
     print(f"[Client {partition_id}] Starting training.")
     train_loss = train_fn(
         net=model,

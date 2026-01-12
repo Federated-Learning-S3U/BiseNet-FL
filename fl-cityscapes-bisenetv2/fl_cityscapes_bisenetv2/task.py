@@ -39,8 +39,7 @@ def train(
 
     net.to(device)
     criterion_pre = OhemCELoss(0.7, device=device)
-    criterion_aux = [OhemCELoss(0.7, device=device)
-                     for _ in range(num_aux_heads)]
+    criterion_aux = [OhemCELoss(0.7, device=device) for _ in range(num_aux_heads)]
 
     optimizer = set_optimizer(net, lr_start=lr, weight_decay=wd)
 
@@ -65,7 +64,7 @@ def train(
                 loss = loss_pre + sum(loss_aux)
 
                 # FedProx: add proximal term to the loss
-                if strategy == "FedProx":
+                if strategy == "FedProx" and prox_mu > 0.0:
                     proximal_term = 0.0
                     local_weights = list(net.parameters())
                     for w, w_t in zip(local_weights, global_weights):
@@ -73,7 +72,7 @@ def train(
                     loss += (prox_mu / 2) * proximal_term
 
                 # Negative-entropy regularization (encourages confident predictions)
-                if neg_entropy_weight > 0.0:
+                if strategy == "FedEMA" and neg_entropy_weight > 0.0:
                     probs = torch.softmax(logits, dim=1)
                     log_probs = torch.log_softmax(logits, dim=1)
                     # Average negative entropy over batch and pixels
@@ -212,8 +211,7 @@ def make_central_evaluate(context: Context):
         torch.save(state_dict, save_latest)
         with open(latest_metric_file, "w") as f:
             json.dump(
-                {"mIoU": metrics["mIoU"],
-                    "round": rounds_trained + server_round},
+                {"mIoU": metrics["mIoU"], "round": rounds_trained + server_round},
                 f,
                 indent=4,
             )

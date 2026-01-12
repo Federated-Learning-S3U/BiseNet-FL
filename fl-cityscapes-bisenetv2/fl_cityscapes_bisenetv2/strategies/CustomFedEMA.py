@@ -35,10 +35,12 @@ class CustomFedEMA(CustomFedAvg):
     def __init__(
         self,
         server_momentum: float = 0.9,
+        neg_entropy_weight: float = 0.0,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.server_momentum = server_momentum
+        self.neg_entropy_weight = neg_entropy_weight
         self.current_arrays: ArrayRecord | None = None
 
     def summary(self) -> None:
@@ -62,6 +64,7 @@ class CustomFedEMA(CustomFedAvg):
             # First round initialization
             self.current_arrays = arrays
 
+        config["neg-entropy-weight"] = self.neg_entropy_weight
         return super().configure_train(server_round, arrays, config, grid)
 
     def aggregate_train(
@@ -84,7 +87,8 @@ class CustomFedEMA(CustomFedAvg):
 
         # Convert ArrayRecords to dicts of numpy arrays (key-safe)
         old_params: Dict[str, np.ndarray] = {
-            k: v for k, v in zip(
+            k: v
+            for k, v in zip(
                 self.current_arrays.keys(),
                 self.current_arrays.to_numpy_ndarrays(),
                 strict=True,
@@ -92,7 +96,8 @@ class CustomFedEMA(CustomFedAvg):
         }
 
         agg_params: Dict[str, np.ndarray] = {
-            k: v for k, v in zip(
+            k: v
+            for k, v in zip(
                 aggregated_arrays.keys(),
                 aggregated_arrays.to_numpy_ndarrays(),
                 strict=True,
@@ -147,10 +152,7 @@ class CustomFedEMA(CustomFedAvg):
 
         # Convert back to ArrayRecord
         new_array_record = ArrayRecord(
-            {
-                k: Array.from_numpy_ndarray(v)
-                for k, v in new_params.items()
-            }
+            {k: Array.from_numpy_ndarray(v) for k, v in new_params.items()}
         )
 
         # Update server state ONLY after successful aggregation

@@ -1,7 +1,5 @@
 import json
-from logging import INFO
 from typing import Iterable
-import numpy as np
 
 from flwr.serverapp import Grid
 from flwr.serverapp.strategy import FedAvg

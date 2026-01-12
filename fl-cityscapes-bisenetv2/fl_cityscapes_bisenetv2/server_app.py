@@ -51,6 +51,7 @@ def main(grid: Grid, context: Context) -> None:
         ]
     elif strategy_name == "FedEMA":
         strategy_params["server_momentum"] = context.run_config["server-momentum"]
+        strategy_params["neg_entropy_weight"] = context.run_config["neg-entropy-weight"]
 
     # Load global model
     global_model = BiSeNetV2(num_classes)
