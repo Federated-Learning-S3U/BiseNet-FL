@@ -51,6 +51,7 @@ def train(msg: Message, context: Context):
 
     # Call the training function
     prox_mu = msg.content["config"].get("proximal-mu", 0.0)
+    neg_entropy_weight = msg.content["config"].get("neg-entropy-weight", 0.0)
     print(f"[Client {partition_id}] Starting training.")
     train_loss = train_fn(
         net=model,
@@ -62,6 +63,7 @@ def train(msg: Message, context: Context):
         num_aux_heads=num_aux_heads,
         strategy=context.run_config["strategy-name"],
         prox_mu=prox_mu,
+        neg_entropy_weight=neg_entropy_weight,
     )
 
     model.cpu()
