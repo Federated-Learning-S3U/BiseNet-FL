@@ -225,8 +225,6 @@ def evaluate(msg: Message, context: Context):
             print(f"[Client {partition_id}] SiloBN Eval: Using default BN statistics (first eval)")
     else:
         model.load_state_dict(server_state_dict)
-    else:
-        model.load_state_dict(server_state_dict)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
