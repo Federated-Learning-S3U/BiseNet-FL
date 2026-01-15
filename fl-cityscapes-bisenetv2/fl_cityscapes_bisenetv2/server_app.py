@@ -26,6 +26,7 @@ def main(grid: Grid, context: Context) -> None:
     # Read run config
     num_rounds: int = context.run_config["num-server-rounds"]
     fraction_train: float = context.run_config["fraction-train"]
+    fraction_evaluate: float = context.run_config["fraction-evaluate"]
 
     num_classes: int = context.run_config["num-classes"]
 
@@ -53,9 +54,14 @@ def main(grid: Grid, context: Context) -> None:
     elif strategy_name == "FedEMA":
         strategy_params["server_momentum"] = context.run_config["server-momentum"]
     elif strategy_name == "FedSiloBN":
-        # FedSiloBN uses client-side evaluation
-        # Pass the evaluation aggregator to the strategy
         strategy_params["silobn_eval_aggregator"] = make_silobn_evaluate_aggregator(context)
+        # Pass eval_interval and rounds_trained for evaluation scheduling & resume support
+        strategy_params["eval_interval"] = context.run_config["eval-interval"]
+        strategy_params["rounds_trained"] = rounds_trained
+        fraction_evaluate = 1.0  # Evaluate on all participating clients
+        print(f"[Server] SiloBN: Client-side evaluation enabled (fraction_evaluate={fraction_evaluate})")
+        print(f"[Server] SiloBN: Evaluation interval = {context.run_config['eval-interval']} rounds")
+
 
     # Load global model
     global_model = BiSeNetV2(num_classes)
@@ -75,12 +81,6 @@ def main(grid: Grid, context: Context) -> None:
 
     # Create central evaluation function that accepts context as an argument
     evaluate_fn = make_central_evaluate(context)
-
-    # For SiloBN: enable client-side evaluation
-    fraction_evaluate = 0.0
-    if strategy_name == "FedSiloBN":
-        fraction_evaluate = 1.0  # Evaluate on all participating clients
-        print(f"[Server] SiloBN: Client-side evaluation enabled (fraction_evaluate={fraction_evaluate})")
 
     # Initialize Custom strategy
     strategy = eval(custom_strategy_name)(

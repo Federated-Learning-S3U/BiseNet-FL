@@ -243,3 +243,92 @@ def merge_with_local_bn_stats(
     merged = dict(server_state_dict)
     merged.update(local_bn_stats)
     return merged
+
+
+# =============================================================================
+# PERSISTENCE UTILITIES FOR SILOBN RESUME TRAINING
+# Save/load client BN statistics to/from disk for resume support
+# =============================================================================
+
+import os
+
+
+def get_client_bn_stats_path(save_dir: str, partition_id: int) -> str:
+    """
+    Get the file path for a client's BN statistics.
+    
+    Args:
+        save_dir: Directory where client BN stats are saved
+        partition_id: Client partition ID
+        
+    Returns:
+        Path to the client's BN statistics file
+    """
+    return os.path.join(save_dir, f"client_{partition_id}_bn_stats.pt")
+
+
+def save_client_bn_stats(
+    bn_stats: Dict[str, torch.Tensor],
+    save_dir: str,
+    partition_id: int,
+) -> str:
+    """
+    Save client BN statistics to disk for resume training support.
+    
+    Args:
+        bn_stats: Dictionary of BN statistics (running_mean, running_var, etc.)
+        save_dir: Directory to save the file
+        partition_id: Client partition ID
+        
+    Returns:
+        Path where the file was saved
+    """
+    os.makedirs(save_dir, exist_ok=True)
+    save_path = get_client_bn_stats_path(save_dir, partition_id)
+    
+    # Convert to CPU tensors before saving
+    cpu_stats = {k: v.cpu() if hasattr(v, 'cpu') else v for k, v in bn_stats.items()}
+    torch.save(cpu_stats, save_path)
+    
+    return save_path
+
+
+def load_client_bn_stats(
+    save_dir: str,
+    partition_id: int,
+) -> Dict[str, torch.Tensor] | None:
+    """
+    Load client BN statistics from disk for resume training.
+    
+    Args:
+        save_dir: Directory where client BN stats are saved
+        partition_id: Client partition ID
+        
+    Returns:
+        Dictionary of BN statistics if file exists, None otherwise
+    """
+    load_path = get_client_bn_stats_path(save_dir, partition_id)
+    
+    if not os.path.exists(load_path):
+        return None
+    
+    try:
+        bn_stats = torch.load(load_path, map_location="cpu")
+        return bn_stats
+    except Exception as e:
+        print(f"[SiloBN] Warning: Failed to load BN stats from {load_path}: {e}")
+        return None
+
+
+def client_bn_stats_exist(save_dir: str, partition_id: int) -> bool:
+    """
+    Check if saved BN statistics exist for a client.
+    
+    Args:
+        save_dir: Directory where client BN stats are saved
+        partition_id: Client partition ID
+        
+    Returns:
+        True if the file exists, False otherwise
+    """
+    return os.path.exists(get_client_bn_stats_path(save_dir, partition_id))

@@ -83,12 +83,14 @@ class CustomFedSiloBN(CustomFedAvg):
     
     EVALUATION: Since the server doesn't have BN statistics, evaluation is performed
     on clients (using their local BN stats) and the results are aggregated here.
+    Evaluation frequency is controlled by eval_interval (default=1, i.e., every round).
     
     Key features:
     - Learnable parameters (Conv, FC, BN gamma/beta): Aggregated using weighted averaging
     - BN statistics (running_mean, running_var): NEVER leave the client
     - Server has NO knowledge of client BN statistics
     - Evaluation happens on clients, results are aggregated on server
+    - Configurable evaluation interval for resource efficiency
     
     What gets aggregated (sent to server):
     - All convolutional layer weights and biases
@@ -105,11 +107,17 @@ class CustomFedSiloBN(CustomFedAvg):
     def __init__(
         self,
         silobn_eval_aggregator: Optional[Callable] = None,
+        eval_interval: int = 1,
+        rounds_trained: int = 0,
         **kwargs,
     ):
         super().__init__(**kwargs)
         # Store the evaluation aggregator for SiloBN client-side evaluation
         self.silobn_eval_aggregator = silobn_eval_aggregator
+        # Evaluation interval: evaluate every N rounds (default: every round)
+        self.eval_interval = eval_interval
+        # Number of rounds already trained (for resume support)
+        self.rounds_trained = rounds_trained
         # Store the current server arrays for evaluation aggregation
         self._current_arrays: Optional[ArrayRecord] = None
         self._current_round: int = 0
@@ -121,6 +129,8 @@ class CustomFedSiloBN(CustomFedAvg):
         log(INFO, "\t│\t└── BN gamma/beta: Aggregated (learnable)")
         log(INFO, "\t│\t└── Non-BN layers: Aggregated (FedAvg)")
         log(INFO, "\t│\t└── Evaluation: Client-side with aggregation")
+        log(INFO, f"\t│\t└── Eval interval: Every {self.eval_interval} round(s)")
+        log(INFO, f"\t│\t└── Rounds already trained: {self.rounds_trained}")
         log(INFO, "\t│\t└── Note: Clients must filter BN stats before sending")
         super().summary()
     
@@ -268,6 +278,28 @@ class CustomFedSiloBN(CustomFedAvg):
             "num-examples": total_examples,
         })
 
+    def _should_evaluate(self, server_round: int) -> bool:
+        """
+        Determine if evaluation should be performed this round.
+        
+        Evaluation is skipped on round 0 and on rounds that don't match the eval_interval.
+        The actual round number (accounting for resume) is used for the interval check.
+        
+        Args:
+            server_round: Current server round (1-indexed within this training session)
+            
+        Returns:
+            True if evaluation should be performed, False otherwise
+        """
+        if server_round == 0:
+            return False
+        
+        # Calculate the actual total round number (for resume compatibility)
+        actual_round = self.rounds_trained + server_round
+        
+        # Evaluate if actual_round is divisible by eval_interval
+        return actual_round % self.eval_interval == 0
+    
     def configure_evaluate(
         self, server_round: int, arrays: ArrayRecord, config: ConfigRecord, grid: Grid
     ) -> Iterable[Message]:
@@ -279,6 +311,8 @@ class CustomFedSiloBN(CustomFedAvg):
         2. Each client has its own local BN statistics
         3. Using default BN stats (mean=0, var=1) on server gives inaccurate results
         
+        Evaluation frequency is controlled by eval_interval to reduce resource usage.
+        
         This method sends the aggregated learnable parameters to clients for evaluation.
         Each client will merge these with their local BN statistics before evaluating.
         """
@@ -286,7 +320,15 @@ class CustomFedSiloBN(CustomFedAvg):
         self._current_arrays = arrays
         self._current_round = server_round
         
-        log(INFO, f"[SiloBN] Round {server_round}: Configuring client-side evaluation")
+        # Check if we should evaluate this round
+        if not self._should_evaluate(server_round):
+            actual_round = self.rounds_trained + server_round
+            log(INFO, f"[SiloBN] Round {actual_round}: Skipping evaluation (eval_interval={self.eval_interval})")
+            # Return empty list to skip evaluation
+            return []
+        
+        actual_round = self.rounds_trained + server_round
+        log(INFO, f"[SiloBN] Round {actual_round}: Configuring client-side evaluation")
         log(INFO, f"[SiloBN] Clients will evaluate using their local BN statistics")
         
         # Call parent to configure evaluation messages

@@ -13,6 +13,8 @@ from fl_cityscapes_bisenetv2.utils.bn_utils import (
     filter_bn_statistics,
     extract_bn_statistics,
     merge_with_local_bn_stats,
+    save_client_bn_stats,
+    load_client_bn_stats,
 )
 
 from lib.models import BiSeNetV2
@@ -42,6 +44,10 @@ def train(msg: Message, context: Context):
     cropsize: list = json.loads(context.run_config["cropsize"])
     
     strategy_name: str = context.run_config["strategy-name"]
+    
+    # SiloBN resume training configs
+    rounds_trained: int = context.run_config.get("rounds-trained", 0)
+    client_bn_stats_dir: str = context.run_config.get("client-bn-stats-dir", "./res/client_bn_stats")
 
     # Load the model and initialize it with the received weights
     model = BiSeNetV2(num_classes)
@@ -49,9 +55,13 @@ def train(msg: Message, context: Context):
     # For SiloBN: merge server params with local BN statistics
     server_state_dict = msg.content["arrays"].to_torch_state_dict()
     
+    # Get partition_id early for SiloBN operations
+    partition_id = context.node_config["partition-id"]
+    
     if strategy_name == "FedSiloBN":
-        # Check if we have local BN statistics stored from previous round
+        # Check if we have local BN statistics stored from previous round (in-memory)
         local_bn_record = context.state.get("local_bn_statistics", None)
+        
         if local_bn_record is not None:
             # Convert ArrayRecord back to dict for merging
             local_bn_stats = local_bn_record.to_torch_state_dict()
@@ -60,13 +70,30 @@ def train(msg: Message, context: Context):
                 server_state_dict, local_bn_stats
             )
             model.load_state_dict(merged_state_dict)
+            print(f"[Client {partition_id}] SiloBN: Using in-memory local BN statistics")
+        elif rounds_trained > 0:
+            # Resume training: try to load BN stats from disk
+            disk_bn_stats = load_client_bn_stats(client_bn_stats_dir, partition_id)
+            if disk_bn_stats is not None:
+                # Merge server learnable params with loaded local BN statistics
+                merged_state_dict = merge_with_local_bn_stats(
+                    server_state_dict, disk_bn_stats
+                )
+                model.load_state_dict(merged_state_dict)
+                # Also store in context.state for subsequent rounds
+                context.state["local_bn_statistics"] = ArrayRecord(disk_bn_stats)
+                print(f"[Client {partition_id}] SiloBN Resume: Loaded {len(disk_bn_stats)} BN stats from disk")
+            else:
+                # Resuming but no saved BN stats found - use defaults
+                model.load_state_dict(server_state_dict, strict=False)
+                print(f"[Client {partition_id}] SiloBN Resume: No saved BN stats found, using defaults")
         else:
             # First participation for this client - no local BN stats yet
             # Server may send full params (round 1) or only learnable params (round 2+)
             # Use model's default BN stats and load server params with strict=False
             # This handles both cases: full state dict or learnable-only state dict
             model.load_state_dict(server_state_dict, strict=False)
-            print(f"[SiloBN] First participation - using model's default BN statistics")
+            print(f"[Client {partition_id}] SiloBN: First participation - using model's default BN statistics")
     else:
         model.load_state_dict(server_state_dict)
     
@@ -74,8 +101,6 @@ def train(msg: Message, context: Context):
     model.to(device)
 
     # Load the data
-    partition_id = context.node_config["partition-id"]
-
     trainloader = load_client_train_data(
         im_root, client_data_partition, partition_id, batch_size, scales, cropsize
     )
@@ -99,13 +124,18 @@ def train(msg: Message, context: Context):
     cpu_state_dict = {k: v.cpu() for k, v in model.state_dict().items()}
 
     # For SiloBN: filter out BN statistics before sending to server
-    # and store local BN statistics for next round
+    # and store local BN statistics for next round (both in-memory and on disk)
     if strategy_name == "FedSiloBN":
-        # Store local BN statistics in context state for next round
-        # Must wrap in ArrayRecord since context.state only accepts Record types
+        # Extract and store local BN statistics
         local_bn_stats = extract_bn_statistics(cpu_state_dict)
+        
+        # Store in context.state for next round (in-memory, within session)
         context.state["local_bn_statistics"] = ArrayRecord(local_bn_stats)
+        
+        # Save to disk for resume training support (persists across sessions)
+        save_path = save_client_bn_stats(local_bn_stats, client_bn_stats_dir, partition_id)
         print(f"[Client {partition_id}] SiloBN: Stored {len(local_bn_stats)} local BN statistics")
+        print(f"[Client {partition_id}] SiloBN: Saved BN stats to {save_path}")
         
         # Filter out BN statistics before sending to server
         filtered_state_dict = filter_bn_statistics(cpu_state_dict)
@@ -153,6 +183,10 @@ def evaluate(msg: Message, context: Context):
     num_classes: int = context.run_config["num-classes"]
     lb_ignore: int = context.run_config["lb-ignore"]
     strategy_name: str = context.run_config["strategy-name"]
+    
+    # SiloBN resume training configs
+    rounds_trained: int = context.run_config.get("rounds-trained", 0)
+    client_bn_stats_dir: str = context.run_config.get("client-bn-stats-dir", "./res/client_bn_stats")
 
     partition_id = context.node_config["partition-id"]
 
@@ -163,17 +197,34 @@ def evaluate(msg: Message, context: Context):
     # For SiloBN: merge server params with local BN statistics
     if strategy_name == "FedSiloBN":
         local_bn_record = context.state.get("local_bn_statistics", None)
+        
         if local_bn_record is not None:
             local_bn_stats = local_bn_record.to_torch_state_dict()
             merged_state_dict = merge_with_local_bn_stats(
                 server_state_dict, local_bn_stats
             )
             model.load_state_dict(merged_state_dict)
-            print(f"[Client {partition_id}] SiloBN Eval: Using local BN statistics")
+            print(f"[Client {partition_id}] SiloBN Eval: Using in-memory local BN statistics")
+        elif rounds_trained > 0:
+            # Resume training: try to load BN stats from disk
+            disk_bn_stats = load_client_bn_stats(client_bn_stats_dir, partition_id)
+            if disk_bn_stats is not None:
+                merged_state_dict = merge_with_local_bn_stats(
+                    server_state_dict, disk_bn_stats
+                )
+                model.load_state_dict(merged_state_dict)
+                # Also store in context.state for subsequent operations
+                context.state["local_bn_statistics"] = ArrayRecord(disk_bn_stats)
+                print(f"[Client {partition_id}] SiloBN Eval Resume: Loaded BN stats from disk")
+            else:
+                model.load_state_dict(server_state_dict, strict=False)
+                print(f"[Client {partition_id}] SiloBN Eval Resume: No saved BN stats, using defaults")
         else:
             # First eval - no local BN stats, use default
             model.load_state_dict(server_state_dict, strict=False)
             print(f"[Client {partition_id}] SiloBN Eval: Using default BN statistics (first eval)")
+    else:
+        model.load_state_dict(server_state_dict)
     else:
         model.load_state_dict(server_state_dict)
 
