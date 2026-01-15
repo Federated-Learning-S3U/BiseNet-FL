@@ -30,7 +30,7 @@ clientapp = "fl_cityscapes_bisenetv2.client_app:app"
 
 # Server-side FL configs
 server-device = "cuda"
-strategy-name = "FedAvg" # Options: FedAvg, FedAvgM, FedProx
+strategy-name = "FedAvg" # Options: FedAvg, FedAvgM, FedProx, FedEMA
 num-server-rounds = 50
 fraction-train = 0.5
 fraction-evaluate = 0.0
@@ -42,8 +42,13 @@ pretrained-path = "/kaggle/working/res/latest_model.pt" # Might need to be added
 rounds-trained = 0
 
 # Strategy-specific Configs
-# FedAvgM Configs
+# FedAvgM / FedEMA Shared Configs 
 server-momentum = 0.95
+
+# FedEMA Specific Configs
+neg-entropy-weight = 0.001
+
+# FedAvgM Specific Configs
 server-learning-rate = 1.0
 
 # FedProx Configs
