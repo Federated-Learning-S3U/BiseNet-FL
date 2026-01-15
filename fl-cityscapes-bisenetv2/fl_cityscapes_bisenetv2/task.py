@@ -47,6 +47,7 @@ def train(
 
     net.train()
     running_loss = 0.0
+    train_loss_pre = 0.0
     for _ in range(epochs):
         for im, lb in trainloader:
             images = im.to(device)
@@ -85,10 +86,12 @@ def train(
             scaler.update()
 
             running_loss += loss.item()
+            train_loss_pre += loss_pre.item()
 
     avg_trainloss = running_loss / (len(trainloader) * epochs)
+    train_loss_pre = train_loss_pre / (len(trainloader) * epochs)
 
-    return avg_trainloss
+    return avg_trainloss, train_loss_pre
 
 
 def test(net, testloader, device, num_classes, lb_ignore=255):

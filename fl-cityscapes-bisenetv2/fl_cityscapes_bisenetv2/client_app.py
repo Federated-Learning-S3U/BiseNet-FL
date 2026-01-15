@@ -53,7 +53,7 @@ def train(msg: Message, context: Context):
     prox_mu = msg.content["config"].get("proximal-mu", 0.0)
     neg_entropy_weight = msg.content["config"].get("neg-entropy-weight", 0.0)
     print(f"[Client {partition_id}] Starting training.")
-    train_loss = train_fn(
+    train_loss, train_loss_pre = train_fn(
         net=model,
         trainloader=trainloader,
         epochs=local_epochs,
@@ -73,6 +73,7 @@ def train(msg: Message, context: Context):
 
     metrics = {
         "train_loss": train_loss,
+        "train_loss_pre": train_loss_pre,
         "num-examples": len(trainloader.dataset),
     }
     metric_record = MetricRecord(metrics)
