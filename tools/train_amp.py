@@ -99,6 +99,34 @@ def eval_single_scale(net, dl, n_classes, lb_ignore=255):
     return metrics
 
 
+@torch.no_grad()
+def compute_val_loss(net, dl, criteria_pre):
+    """
+    Compute validation loss on the validation dataset (primary loss only, no aux heads).
+    """
+    net.eval()
+    total_loss = 0.0
+    num_batches = 0
+
+    for imgs, label in dl:
+        imgs = imgs.cuda()
+        label = label.squeeze(1).cuda()
+
+        with torch.no_grad():
+            logits = net(imgs)[0]
+            loss = criteria_pre(logits, label)
+
+        total_loss += loss.item()
+        num_batches += 1
+
+    net.train()
+
+    if num_batches == 0:
+        return 0.0
+
+    return total_loss / num_batches
+
+
 def save_checkpoint(
     net, optim, lr_schdr, it, best_miou, latest_metrics, is_best=False, respth=None
 ):
@@ -339,8 +367,13 @@ def train():
             val_miou = val_metrics["miou"]
             val_f1 = val_metrics["macro_f1"]
 
+            # Compute validation loss (primary loss only, no aux heads)
+            val_loss = compute_val_loss(net.module, dl_val, criteria_pre)
+
             logger.info(f"Train - mIoU: {train_miou:.6f}, F1: {train_f1:.6f}")
-            logger.info(f"Val   - mIoU: {val_miou:.6f}, F1: {val_f1:.6f}")
+            logger.info(
+                f"Val   - mIoU: {val_miou:.6f}, F1: {val_f1:.6f}, Loss: {val_loss:.6f}"
+            )
 
             # Update metrics
             latest_metrics = {
@@ -348,6 +381,7 @@ def train():
                 "train_f1": train_f1,
                 "val_miou": val_miou,
                 "val_f1": val_f1,
+                "val_loss": val_loss,
             }
 
             # Save checkpoint
