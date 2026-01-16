@@ -80,7 +80,6 @@ def eval_single_scale(net, dl, n_classes, lb_ignore=255):
     Used during training for quick evaluation.
     """
     net.eval()
-    print("Entered Evaluation Mode")
     metric_observer = Metrics(n_classes, lb_ignore)
 
     for i, (imgs, label) in enumerate(dl):
@@ -95,10 +94,8 @@ def eval_single_scale(net, dl, n_classes, lb_ignore=255):
         preds = torch.argmax(logits, dim=1)
         metric_observer.update(preds, label)
 
-    print("Completed Evaluation Loop")
     metrics = metric_observer.compute_metrics()
     net.train()
-    print("Exited Evaluation Mode")
     return metrics
 
 
