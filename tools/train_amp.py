@@ -80,9 +80,12 @@ def eval_single_scale(net, dl, n_classes, lb_ignore=255):
     Used during training for quick evaluation.
     """
     net.eval()
+    print("Entered Evaluation Mode")
     metric_observer = Metrics(n_classes, lb_ignore)
 
-    for imgs, label in dl:
+    for i, (imgs, label) in enumerate(dl):
+        if i % 100 == 0:
+            print(f"Evaluating batch {i+1}/{len(dl)}")
         imgs = imgs.cuda()
         label = label.squeeze(1).cuda()
 
@@ -92,8 +95,10 @@ def eval_single_scale(net, dl, n_classes, lb_ignore=255):
         preds = torch.argmax(logits, dim=1)
         metric_observer.update(preds, label)
 
+    print("Completed Evaluation Loop")
     metrics = metric_observer.compute_metrics()
     net.train()
+    print("Exited Evaluation Mode")
     return metrics
 
 
@@ -351,13 +356,6 @@ def train():
             logger.info(f"\n--- Evaluation at iteration {it + 1} ---")
             torch.cuda.empty_cache()
 
-            # Single-scale evaluation on training set
-            train_metrics = eval_single_scale(
-                net.module, dl_train, cfg.n_cats, dl_train.dataset.lb_ignore
-            )
-            train_miou = train_metrics["miou"]
-            train_f1 = train_metrics["macro_f1"]
-
             # Single-scale evaluation on validation set
             val_metrics = eval_single_scale(
                 net.module, dl_val, cfg.n_cats, dl_val.dataset.lb_ignore
@@ -368,15 +366,12 @@ def train():
             # Compute validation loss (primary loss only, no aux heads)
             val_loss = compute_val_loss(net.module, dl_val, criteria_pre)
 
-            logger.info(f"Train - mIoU: {train_miou:.6f}, F1: {train_f1:.6f}")
             logger.info(
                 f"Val   - mIoU: {val_miou:.6f}, F1: {val_f1:.6f}, Loss: {val_loss:.6f}"
             )
 
             # Update metrics
             latest_metrics = {
-                "train_miou": train_miou,
-                "train_f1": train_f1,
                 "val_miou": val_miou,
                 "val_f1": val_f1,
                 "val_loss": val_loss,
