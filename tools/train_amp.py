@@ -93,8 +93,6 @@ def eval_single_scale(net, dl, n_classes, lb_ignore=255):
         metric_observer.update(preds, label)
 
     metrics = metric_observer.compute_metrics()
-    if dist.is_initialized():
-        dist.barrier()  # Synchronize all processes
     net.train()
     return metrics
 
