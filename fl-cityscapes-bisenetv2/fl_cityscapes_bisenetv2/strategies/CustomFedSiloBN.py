@@ -351,9 +351,12 @@ class CustomFedSiloBN(CustomFedAvg):
         """
         replies_list = list(replies)
         
+        # If no replies (evaluation was skipped this round), return empty MetricRecord
+        # to avoid serialization issues with Flower's result tracking
         if not replies_list:
-            log(INFO, f"[SiloBN] Round {server_round}: No evaluation replies received")
-            return None, None
+            actual_round = self.rounds_trained + server_round
+            log(INFO, f"[SiloBN] Round {actual_round}: No evaluation replies (evaluation skipped)")
+            return None, MetricRecord({})
         
         # Collect evaluation metrics from all clients
         client_metrics = []
@@ -375,8 +378,9 @@ class CustomFedSiloBN(CustomFedAvg):
             client_metrics.append(metrics_dict)
         
         if not client_metrics:
-            log(INFO, f"[SiloBN] Round {server_round}: No valid evaluation metrics received")
-            return None, None
+            actual_round = self.rounds_trained + server_round
+            log(INFO, f"[SiloBN] Round {actual_round}: No valid evaluation metrics received")
+            return None, MetricRecord({})
         
         log(INFO, f"[SiloBN] Round {server_round}: Aggregating evaluation results from {len(client_metrics)} clients")
         
