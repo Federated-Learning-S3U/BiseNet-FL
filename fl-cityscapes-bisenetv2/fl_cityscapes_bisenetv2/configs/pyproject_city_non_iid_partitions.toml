@@ -82,7 +82,7 @@ local-epochs = 7 # Note, on increasing local epochs may require reducing the LR
 batch-size = 8 # Fix batch for memory constraints
 
 lr = 1e-2 # IMPORTANT UPDATE ON RESUME
-lr-decay-factor = 0.95
+lr-decay-factor = 0.9
 lr-decay-rounds = 5
 lr-schedule-file = "/kaggle/working/res/lr_schedule.json"
 
