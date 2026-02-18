@@ -33,8 +33,8 @@ clientapp = "fl_cityscapes_bisenetv2.client_app:app"
 # Server-side FL configs
 server-device = "cuda"
 strategy-name = "FedAvg" # Options: FedAvg, FedAvgM, FedProx, FedEMA
-num-server-rounds = 30
-fraction-train = 0.2
+num-server-rounds = 20
+fraction-train = 0.5
 fraction-evaluate = 0.0
 
 # Server-side Resume Training Configs
