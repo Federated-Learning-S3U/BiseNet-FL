@@ -9,6 +9,7 @@ from flwr.clientapp import ClientApp
 
 from fl_cityscapes_bisenetv2.data_preparation.datasets import load_client_train_data
 from fl_cityscapes_bisenetv2.task import train as train_fn
+from fl_cityscapes_bisenetv2.utils.clients_logging import log_client_partition
 
 from lib.models import BiSeNetV2
 
@@ -28,6 +29,7 @@ def train(msg: Message, context: Context):
 
     im_root: str = context.run_config["im-root"]
     client_data_partition: str = context.run_config["client-data-partition"]
+    client_selection_log_file: str = context.run_config["client-selection-log"]
 
     num_classes: int = context.run_config["num-classes"]
 
@@ -36,6 +38,13 @@ def train(msg: Message, context: Context):
     scales: list = json.loads(context.run_config["scales"])
     cropsize: list = json.loads(context.run_config["cropsize"])
 
+    # Get partition ID and server round
+    partition_id = context.node_config["partition-id"]
+    server_round = msg.content["config"]["server-round"]
+    
+    # Log client participation
+    log_client_partition(client_selection_log_file, server_round, partition_id)
+
     # Load the model and initialize it with the received weights
     model = BiSeNetV2(num_classes)
     model.load_state_dict(msg.content["arrays"].to_torch_state_dict())
@@ -43,8 +52,6 @@ def train(msg: Message, context: Context):
     model.to(device)
 
     # Load the data
-    partition_id = context.node_config["partition-id"]
-
     trainloader = load_client_train_data(
         im_root, client_data_partition, partition_id, batch_size, scales, cropsize
     )

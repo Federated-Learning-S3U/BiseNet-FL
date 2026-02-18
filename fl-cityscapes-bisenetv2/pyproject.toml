@@ -26,9 +26,9 @@ clientapp = "fl_cityscapes_bisenetv2.client_app:app"
 
 # Server-side FL configs
 server-device = "cuda"
-strategy-name = "FedEMA" # Options: FedAvg, FedAvgM, FedProx, FedEMA
-num-server-rounds = 100
-fraction-train = 0.5
+strategy-name = "FedAvg" # Options: FedAvg, FedAvgM, FedProx, FedEMA
+num-server-rounds = 4
+fraction-train = 0.4
 fraction-evaluate = 0.0
 
 # Server-side Resume Training Configs
@@ -51,7 +51,7 @@ server-learning-rate = 1.0
 proximity-mu = 0.005
 
 # Server-side Evaluation Configs
-eval-batch-size = 8
+eval-batch-size = 1
 eval-interval = 1
 server-data-partition = "./datasets/cityscapes/val.txt"
 
@@ -59,6 +59,7 @@ server-data-partition = "./datasets/cityscapes/val.txt"
 save-latest = "./res/latest_model.pt"
 save-best = "./res/best_model.pt"
 server-results-file = "./res/server_results.txt"
+client-selection-log = "./res/client_selection_log.json"
 
 best-miou = 0.0 # IMPORTANT UPDATE ON RESUME
 best-metric = "./res/best_metric.json"
@@ -73,7 +74,7 @@ client-data-partition = "./datasets/cityscapes/city_partitions.json"
 
 # Model Training Hyper-Params
 local-epochs = 3
-batch-size = 8
+batch-size = 2
 
 lr = 1e-2 # IMPORTANT UPDATE ON RESUME
 lr-decay-factor = 0.95
