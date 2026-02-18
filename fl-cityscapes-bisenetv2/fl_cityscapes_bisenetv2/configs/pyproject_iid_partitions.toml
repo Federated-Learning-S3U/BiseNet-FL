@@ -1,9 +1,10 @@
 # FLWR TOML CONFIG FILE FOR CITYSCAPES WITH CITY PARTITIONS
 
-# Dataset Setup: 10 clients,
-# average of 280 image per client,
-# partition is considered to be iid,
-# based on dirichlet distribution.
+# Dataset Setup: 20 clients,
+# average of 148 image per client,
+# with coefficient of variation of 0.04,
+# indicating a very low degree of variability in client data sizes.
+# Partition is considered to be iid.
 
 [build-system]
 requires = ["hatchling"]
@@ -32,7 +33,7 @@ clientapp = "fl_cityscapes_bisenetv2.client_app:app"
 # Server-side FL configs
 server-device = "cuda"
 strategy-name = "FedAvg" # Options: FedAvg, FedAvgM, FedProx, FedEMA
-num-server-rounds = 50
+num-server-rounds = 20
 fraction-train = 0.5
 fraction-evaluate = 0.0
 
@@ -77,12 +78,12 @@ im-root = "/kaggle/input/cityscapes-fine-dataset"
 client-data-partition = "./datasets/cityscapes/iid_partitions.json"
 
 # Model Training Hyper-Params
-local-epochs = 3 # Note, on increasing local epochs may require reducing the LR
+local-epochs = 7 # Note, on increasing local epochs may require reducing the LR
 batch-size = 8 # Fix batch for memory constraints
 
 lr = 1e-2 # IMPORTANT UPDATE ON RESUME
-lr-decay-factor = 0.9
-lr-decay-rounds = 10
+lr-decay-factor = 0.95
+lr-decay-rounds = 5
 lr-schedule-file = "/kaggle/working/res/lr_schedule.json"
 
 # Model Configs
