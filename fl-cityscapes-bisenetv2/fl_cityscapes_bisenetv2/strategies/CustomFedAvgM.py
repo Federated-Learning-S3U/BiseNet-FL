@@ -1,70 +1,74 @@
-import json
 from logging import INFO
-from typing import Iterable
+from typing import Dict, Iterable
 import numpy as np
 
 from flwr.serverapp import Grid
-from flwr.serverapp.strategy import FedAvg
 from flwr.common import (
     Array,
     ArrayRecord,
     ConfigRecord,
     Message,
     MetricRecord,
-    NDArrays,
     log,
 )
+from .CustomFedAvg import CustomFedAvg
 
 
-class CustomFedAvgM(FedAvg):
+class CustomFedAvgM(CustomFedAvg):
+    """
+    Federated Learning with Server-Side Momentum (FedAvgM) strategy.
+
+    This strategy applies momentum to the server-side model updates,
+    accumulating velocity across rounds.
+
+    Update rule:
+        delta = w_avg_clients - w_global
+        v = beta * v + delta
+        w_global = w_global + server_lr * v
+
+    Where:
+        w_global: Current global model
+        w_avg_clients: Weighted average of client models (standard FedAvg result)
+        delta: Update/difference between aggregated and current model
+        v: Momentum buffer (velocity)
+        beta: Momentum coefficient (0 <= beta < 1)
+        server_lr: Server learning rate
+    """
+
     def __init__(
         self,
+        server_momentum: float = 0.9,
         server_learning_rate: float = 1.0,
-        server_momentum: float = 0.0,
-        lr_decay_factor: float = 0.9,
-        lr_decay_rounds: int = 5,
-        lr_schedule_file: str = "./res/lr_schedule.json",
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.server_learning_rate = server_learning_rate
         self.server_momentum = server_momentum
-        self.server_opt: bool = (self.server_momentum != 0.0) or (
-            self.server_learning_rate != 1.0
-        )
-
+        self.server_learning_rate = server_learning_rate
         self.current_arrays: ArrayRecord | None = None
-        self.momentum_vector: NDArrays | None = None
-
-        self.lr_decay_factor = lr_decay_factor
-        self.lr_decay_rounds = lr_decay_rounds
-        self.lr_schedule_file = lr_schedule_file
+        self.momentum_buffer: Dict[str, np.ndarray] | None = None
 
     def summary(self) -> None:
         """Log summary configuration of the strategy."""
-        opt_status = "ON" if self.server_opt else "OFF"
         log(INFO, "\t├──> FedAvgM settings:")
-        log(INFO, "\t│\t├── Server optimization: %s", opt_status)
-        log(INFO, "\t│\t├── Server learning rate: %s", self.server_learning_rate)
-        log(INFO, "\t│\t└── Server Momentum: %s", self.server_momentum)
+        log(INFO, "\t│\t├── Server Momentum (beta): %s", self.server_momentum)
+        log(INFO, "\t│\t└── Server Learning Rate: %s", self.server_learning_rate)
         super().summary()
 
     def configure_train(
-        self, server_round: int, arrays: ArrayRecord, config: ConfigRecord, grid: Grid
+        self,
+        server_round: int,
+        arrays: ArrayRecord,
+        config: ConfigRecord,
+        grid: Grid,
     ) -> Iterable[Message]:
-        """Configure the next round of federated training and maybe do LR decay."""
+        """
+        Save the current global model before sending it to clients.
+        This model will be used as w_global in the momentum update.
+        """
         if self.current_arrays is None:
+            # First round initialization
             self.current_arrays = arrays
 
-        # Decrease learning rate by a factor of 0.9 every 5 rounds
-        if server_round % self.lr_decay_rounds == 0 and server_round > 0:
-            config["lr"] *= self.lr_decay_factor
-            print("LR decreased to:", config["lr"])
-
-            with open(self.lr_schedule_file, "w") as f:
-                json.dump({"round": server_round, "lr": config["lr"]}, f)
-
-        # Pass the updated config and the rest of arguments to the parent class
         return super().configure_train(server_round, arrays, config, grid)
 
     def aggregate_train(
@@ -72,61 +76,104 @@ class CustomFedAvgM(FedAvg):
         server_round: int,
         replies: Iterable[Message],
     ) -> tuple[ArrayRecord | None, MetricRecord | None]:
-        """Aggregate ArrayRecords and MetricRecords in the received Messages (with fix)."""
+        """
+        Aggregate client updates using FedAvg, then apply server-side momentum.
+        """
 
-        # Call FedAvg aggregate_train to perform validation and aggregation
         aggregated_arrays, aggregated_metrics = super().aggregate_train(
             server_round, replies
         )
 
-        # The rest of the logic is copied from the original FedAvgM,
-        # but with the corrected Array creation.
-        if self.server_opt and aggregated_arrays is not None:
-            # The initial parameters should be set in `start()` method already
-            if self.current_arrays is None:
-                from flwr.serverapp.exception import AggregationError
+        if aggregated_arrays is None or self.current_arrays is None:
+            return aggregated_arrays, aggregated_metrics
 
-                raise AggregationError(
-                    "No initial parameters set for FedAvgM. "
-                    "Ensure that `configure_train` has been called before aggregation."
-                )
-            ndarrays = self.current_arrays.to_numpy_ndarrays()
-            aggregated_ndarrays = aggregated_arrays.to_numpy_ndarrays()
+        beta = self.server_momentum
+        server_lr = self.server_learning_rate
 
-            # Preserve keys for arrays in ArrayRecord
-            array_keys = list(aggregated_arrays.keys())
-            aggregated_arrays.clear()
-
-            # Remember that updates are the opposite of gradients
-            pseudo_gradient = [
-                old - new
-                for new, old in zip(aggregated_ndarrays, ndarrays, strict=True)
-            ]
-            if self.server_momentum > 0.0:
-                if self.momentum_vector is None:
-                    # Initialize momentum vector in the first round
-                    self.momentum_vector = pseudo_gradient
-                else:
-                    self.momentum_vector = [
-                        self.server_momentum * mv + pg
-                        for mv, pg in zip(
-                            self.momentum_vector, pseudo_gradient, strict=True
-                        )
-                    ]
-
-                # No nesterov for now
-                pseudo_gradient = self.momentum_vector
-
-            # SGD and convert back to ArrayRecord
-            updated_array_list = [
-                Array.from_numpy_ndarray(np.array(old - self.server_learning_rate * pg))
-                for old, pg in zip(ndarrays, pseudo_gradient, strict=True)
-            ]
-            aggregated_arrays = ArrayRecord(
-                dict(zip(array_keys, updated_array_list, strict=True))
+        # Convert ArrayRecords to dicts of numpy arrays (key-safe)
+        old_params: Dict[str, np.ndarray] = {
+            k: v
+            for k, v in zip(
+                self.current_arrays.keys(),
+                self.current_arrays.to_numpy_ndarrays(),
+                strict=True,
             )
+        }
 
-            # Update current weights
-            self.current_arrays = aggregated_arrays
+        agg_params: Dict[str, np.ndarray] = {
+            k: v
+            for k, v in zip(
+                aggregated_arrays.keys(),
+                aggregated_arrays.to_numpy_ndarrays(),
+                strict=True,
+            )
+        }
 
-        return aggregated_arrays, aggregated_metrics
+        # Initialize momentum buffer to zeros on first round
+        if self.momentum_buffer is None:
+            self.momentum_buffer = {k: np.zeros_like(
+                v) for k, v in old_params.items()}
+
+        new_params: Dict[str, np.ndarray] = {}
+
+        # Track stats only for trainable parameters
+        max_abs_weight = 0.0
+        mean_abs_weight_acc = []
+        num_tracked = 0
+
+        for key in agg_params.keys():
+            old = old_params[key]
+            agg = agg_params[key]
+
+            # BatchNorm buffers -> use aggregated values directly (no momentum)
+            if (
+                "running_mean" in key
+                or "running_var" in key
+                or "num_batches_tracked" in key
+            ):
+                new = agg
+            else:
+                # Compute delta: update direction
+                delta = agg - old
+
+                # Update momentum buffer: v = beta * v + delta
+                self.momentum_buffer[key] = beta * \
+                    self.momentum_buffer[key] + delta
+
+                # Apply update: w_new = w_old + server_lr * v
+                new = old + server_lr * self.momentum_buffer[key]
+
+                abs_new = np.abs(new)
+                max_abs_weight = max(max_abs_weight, abs_new.max())
+                mean_abs_weight_acc.append(abs_new.mean())
+                num_tracked += 1
+
+            new_params[key] = new
+
+        mean_abs_weight = (
+            float(np.mean(mean_abs_weight_acc)) if num_tracked > 0 else 0.0
+        )
+
+        log(
+            INFO,
+            (
+                "FedAvgM (round=%d, beta=%.3f, lr=%.3f): "
+                "updated %d tensors | max|w|=%.5f | mean|w|=%.5f"
+            ),
+            server_round,
+            beta,
+            server_lr,
+            num_tracked,
+            max_abs_weight,
+            mean_abs_weight,
+        )
+
+        # Convert back to ArrayRecord
+        new_array_record = ArrayRecord(
+            {k: Array.from_numpy_ndarray(v) for k, v in new_params.items()}
+        )
+
+        # Update server state ONLY after successful aggregation
+        self.current_arrays = new_array_record
+
+        return new_array_record, aggregated_metrics
