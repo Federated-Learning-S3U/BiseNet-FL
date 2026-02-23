@@ -113,10 +113,9 @@ def load_client_dataset(
             data_partitions = json.load(f)
 
         partition = data_partitions[str(partition_id)]
-        normalization_metrics = partition.get("data_metrics", {})
 
         ds = CityScapesClientDataset(
-            im_root, partition["data"], normalization_metrics, T.TransformationVal()
+            im_root, partition["data"], T.TransformationVal()
         )
 
         from torch.utils.data import DataLoader
