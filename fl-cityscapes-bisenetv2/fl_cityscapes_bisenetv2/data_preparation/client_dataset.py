@@ -25,8 +25,8 @@ class CityScapesClientDataset(Dataset):
         self.data = data
         self.transform = transform
         self.to_tensor = T.ToTensor(
-            mean=(0.3257, 0.3690, 0.3223),
-            std=(0.2112, 0.2148, 0.2115)
+            mean=(0.485, 0.456, 0.406),
+            std=(0.229, 0.224, 0.225)
         )
 
     def __len__(self):
