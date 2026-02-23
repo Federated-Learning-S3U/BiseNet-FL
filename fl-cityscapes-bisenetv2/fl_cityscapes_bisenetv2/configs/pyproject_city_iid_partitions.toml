@@ -1,0 +1,112 @@
+# FLWR TOML CONFIG FILE FOR CITYSCAPES WITH CITY PARTITIONS
+
+# Dataset Setup: 55 clients,
+# average of 54 images per client,
+# with coefficient of variation of 0.46, #TODO
+# indicating a moderate degree of variability in client data sizes.
+# Partition is considered to be iid based on city semantic distribution.
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fl-cityscapes-bisenetv2"
+version = "1.0.0"
+description = ""
+license = "Apache-2.0"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+
+[tool.flwr.app]
+publisher = "moustafa"
+
+# Point to your ServerApp and ClientApp objects
+[tool.flwr.app.components]
+serverapp = "fl_cityscapes_bisenetv2.server_app:app"
+clientapp = "fl_cityscapes_bisenetv2.client_app:app"
+
+# Custom config values accessible via `context.run_config`
+[tool.flwr.app.config]
+
+# Server-side FL configs
+server-device = "cuda"
+strategy-name = "FedAvg" # Options: FedAvg, FedAvgM, FedProx, FedEMA
+num-server-rounds = 20
+fraction-train = 0.5
+fraction-evaluate = 0.0
+
+# Server-side Resume Training Configs
+# IMPORTANT UPDATE ON RESUME
+resume = false
+pretrained-path = "/kaggle/working/res/latest_model.pt" # Might need to be added as an input model
+rounds-trained = 0
+
+# Strategy-specific Configs
+# FedAvgM / FedEMA Shared Configs 
+server-momentum = 0.95
+
+# FedEMA Specific Configs
+neg-entropy-weight = 0.001
+
+# FedAvgM Specific Configs
+server-learning-rate = 1.0
+
+# FedProx Configs
+proximity-mu = 0.005
+
+# Server-side Evaluation Configs
+eval-batch-size = 8
+eval-interval = 1
+server-data-partition = "./datasets/cityscapes/val.txt"
+
+# Server-side Saving Configs
+save-latest = "/kaggle/working/res/latest_model.pt"
+save-best = "/kaggle/working/res/best_model.pt"
+server-results-file = "/kaggle/working/res/server_results.txt"
+client-selection-log = "/kaggle/working/res/client_selection_log.json"
+
+best-miou = 0.0 # IMPORTANT UPDATE ON RESUME
+best-metric = "/kaggle/working/res/best_metric.json"
+latest-metric = "/kaggle/working/res/latest_metric.json"
+
+# Client-side FL Configs
+client-device = "cuda"
+
+# Client Dataset Paths
+im-root = "/kaggle/input/cityscapes-fine-dataset"
+client-data-partition = "./datasets/cityscapes/city_iid_partitions.json"
+
+# Model Training Hyper-Params
+local-epochs = 7 # Note, on increasing local epochs may require reducing the LR
+batch-size = 8 # Fix batch for memory constraints
+
+lr = 1e-2 # IMPORTANT UPDATE ON RESUME
+lr-decay-factor = 0.95
+lr-decay-rounds = 5
+lr-schedule-file = "/kaggle/working/res/lr_schedule.json"
+
+# Model Configs
+num-classes = 19
+lb-ignore = 255
+num-aux-heads = 4
+
+# Optimizer Configs
+weight-decay = 5e-4
+
+# Data Augmentation Configs
+scales = "[0.25, 2.0]"
+cropsize = "[512, 1024]"
+
+# Default federation to use when running the app
+[tool.flwr.federations]
+default = "local-simulation-single-gpu"
+
+# Local simulation federation with 18 virtual SuperNodes
+[tool.flwr.federations.local-simulation-single-gpu]
+options.backend.init_args.num_cpus = 2 # Number of CPUs for the simulation controller 
+options.backend.init_args.num_gpus = 1 # Number of GPUs for the simulation controller
+options.num-supernodes = 55 # Number of SuperNodes (i.e., Clients) in the Data Setup
+options.backend.client-resources.num-cpus = 2 # Number of CPUs per Client
+options.backend.client-resources.num-gpus = 1.0 # Fractional GPU allocation per Client
