@@ -28,7 +28,6 @@ def load_client_train_data(
     ds = CityScapesClientDataset(
         data_root,
         partition["data"],
-        partition["data_metrics"],
         T.TransformationTrain(scales, cropsize),
     )
 
@@ -50,7 +49,6 @@ def load_client_train_data(
 def load_server_eval_data(
     data_root: str,
     data_file: str,
-    normalization_metrics: dict,
     batch_size: int,
 ):
     """Load full CityScapes val data for server evaluation."""
@@ -75,7 +73,6 @@ def load_server_eval_data(
     ds = CityScapesClientDataset(
         data_root,
         data,
-        normalization_metrics,
         T.TransformationVal(),
     )
 

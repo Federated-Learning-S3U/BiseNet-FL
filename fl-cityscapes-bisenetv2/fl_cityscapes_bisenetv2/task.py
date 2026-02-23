@@ -154,9 +154,6 @@ def make_central_evaluate(context: Context):
     latest_metric_file = context.run_config["latest-metric"]
     client_data_partition = context.run_config["client-data-partition"]
 
-    data_mean, data_std = aggregate_client_metrics(client_data_partition)
-    data_metrics = {"mean": data_mean, "std": data_std}
-
     def central_evaluate(server_round: int, arrays: ArrayRecord) -> MetricRecord:
         """Evaluate the global model on the server side (optional)."""
 
@@ -188,7 +185,6 @@ def make_central_evaluate(context: Context):
         eval_loader = load_server_eval_data(
             data_root=im_root,
             data_file=server_data_partition,
-            normalization_metrics=data_metrics,
             batch_size=eval_batch_size,
         )
 
