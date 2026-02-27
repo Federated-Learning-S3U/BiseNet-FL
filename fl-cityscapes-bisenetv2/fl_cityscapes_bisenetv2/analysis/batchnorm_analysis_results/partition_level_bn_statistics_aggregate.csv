@@ -1,0 +1,3 @@
+partition_id,partition_type,aggregator,num_communication_rounds,num_bn_layers,total_bn_features,mean_running_var_across_rounds,std_running_var_across_rounds,min_running_var,max_running_var,cv_running_var_mean
+IID_Partition,IID,FedAvg,5,54,8664,24.747166,10.52351,0.0,1257.0182,239.36494
+Non_IID_Partition,Non-IID,FedAvg,5,54,8664,17.509731,6.7911577,0.0,926.42004,246.92734
