@@ -1,0 +1,3 @@
+partition_id,partition_type,mean_running_var,std_running_var,cv_running_var,num_rounds,num_bn_layers,min_running_var,max_running_var
+IID_Partition,IID,24.74716567993164,10.523509979248047,239.3649444580078,5,54,0.0,1257.0181884765625
+Non_IID_Partition,Non-IID,17.50973129272461,6.7911577224731445,246.92733764648438,5,54,0.0,926.4200439453125

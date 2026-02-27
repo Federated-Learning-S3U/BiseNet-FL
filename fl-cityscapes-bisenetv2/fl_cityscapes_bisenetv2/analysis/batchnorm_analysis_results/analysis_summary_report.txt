@@ -1,0 +1,83 @@
+======================================================================
+BATCHNORM STATISTICS ANALYSIS REPORT
+Independent Per-Partition Analysis
+======================================================================
+
+ANALYSIS APPROACH:
+  Each partition is analyzed independently without grouping by IID/Non-IID type
+  This examines how BatchNorm statistics naturally vary across different data partitions
+
+AGGREGATOR: FedAvg
+Total partitions analyzed: 2
+
+======================================================================
+AGGREGATE STATISTICS PER PARTITION
+======================================================================
+
+1. IID_Partition (IID)
+   Communication Rounds: 5
+   BatchNorm Layers: 54
+   Mean Running Variance: 24.747166 (±10.523510)
+   Range: [0.000000, 1257.018188]
+   Coefficient of Variation: 239.36%
+
+2. Non_IID_Partition (Non-IID)
+   Communication Rounds: 5
+   BatchNorm Layers: 54
+   Mean Running Variance: 17.509731 (±6.791158)
+   Range: [0.000000, 926.420044]
+   Coefficient of Variation: 246.93%
+
+======================================================================
+PER-ROUND ANALYSIS
+======================================================================
+
+
+IID_Partition:
+Round  Mean Var         Std Var          CV (%)    
+----------------------------------------------------
+20     44.778709        97.563484        217.88    
+40     25.312685        61.229443        241.89    
+60     20.331430        50.007984        245.96    
+80     17.584501        43.230549        245.84    
+100    15.728505        38.573318        245.24    
+  Trend: decreasing (slope: -0.329143)
+
+Non_IID_Partition:
+Round  Mean Var         Std Var          CV (%)    
+----------------------------------------------------
+20     29.797462        70.777351        237.53    
+40     19.375240        48.401772        249.81    
+60     15.042251        37.295254        247.94    
+80     12.605941        31.460634        249.57    
+100    10.727767        26.796844        249.79    
+  Trend: decreasing (slope: -0.224543)
+
+======================================================================
+COMPARISON ACROSS PARTITIONS
+======================================================================
+
+Average mean running variance across all partitions: 21.128448
+
+Partition with HIGHEST variance:
+  IID_Partition (IID)
+  Mean Running Variance: 24.747166
+
+Partition with LOWEST variance:
+  Non_IID_Partition (Non-IID)
+  Mean Running Variance: 17.509731
+
+Variance Range: [17.509731, 24.747166]
+Standard Deviation: 5.117639
+
+======================================================================
+INTERPRETATION
+======================================================================
+
+These results show how BatchNorm running statistics vary naturally across
+different data partitions. Higher running variance indicates that the model
+is exposed to more diverse feature distributions during training. Lower
+variance suggests more localized or specialized distributions.
+
+Each partition's unique statistics reflect the underlying data characteristics
+of that specific geospatial region, training cohort, or data collection scenario.
