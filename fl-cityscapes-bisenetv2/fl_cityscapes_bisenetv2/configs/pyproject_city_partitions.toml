@@ -66,6 +66,7 @@ save-latest = "/kaggle/working/res/latest_model.pt"
 save-best = "/kaggle/working/res/best_model.pt"
 server-results-file = "/kaggle/working/res/server_results.txt"
 client-selection-log = "/kaggle/working/res/client_selection_log.json"
+base-path = "/kaggle/working/res/"
 
 best-miou = 0.0 # IMPORTANT UPDATE ON RESUME
 best-metric = "/kaggle/working/res/best_metric.json"

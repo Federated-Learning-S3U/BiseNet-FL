@@ -1,5 +1,6 @@
 """fl-cityscapes-bisenetv2: A Flower / PyTorch app."""
 
+import os
 import torch
 from flwr.app import ArrayRecord, ConfigRecord, Context
 from flwr.serverapp import Grid, ServerApp
@@ -40,6 +41,11 @@ def main(grid: Grid, context: Context) -> None:
     strategy_name: str = context.run_config["strategy-name"]
     custom_strategy_name = "Custom" + strategy_name
 
+    # Extract partition name from client data partition path
+    client_data_partition: str = context.run_config["client-data-partition"]
+    partition_name = os.path.splitext(os.path.basename(client_data_partition))[0]
+    base_path = context.run_config["base-path"]
+
     # Read Strategy Params
     strategy_params = {}
     if strategy_name == "FedProx":
@@ -79,6 +85,8 @@ def main(grid: Grid, context: Context) -> None:
         lr_schedule_file=lr_schedule_file,
         lr_decay_factor=lr_decay_factor,
         lr_decay_rounds=lr_decay_rounds,
+        base_path=base_path,
+        partition_name=partition_name,
         **strategy_params,
     )
 

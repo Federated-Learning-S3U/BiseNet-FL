@@ -60,6 +60,7 @@ save-latest = "./res/latest_model.pt"
 save-best = "./res/best_model.pt"
 server-results-file = "./res/server_results.txt"
 client-selection-log = "./res/client_selection_log.json"
+base-path = "./res/"
 
 best-miou = 0.0 # IMPORTANT UPDATE ON RESUME
 best-metric = "./res/best_metric.json"

@@ -2,6 +2,7 @@
 
 import json
 import gc
+import os
 
 import torch
 from flwr.app import ArrayRecord, Context, Message, MetricRecord, RecordDict
@@ -10,6 +11,10 @@ from flwr.clientapp import ClientApp
 from fl_cityscapes_bisenetv2.data_preparation.datasets import load_client_train_data
 from fl_cityscapes_bisenetv2.task import train as train_fn
 from fl_cityscapes_bisenetv2.utils.clients_logging import log_client_partition
+from fl_cityscapes_bisenetv2.utils.checkpoint_utils import (
+    save_local_model,
+    update_client_metadata,
+)
 
 from lib.models import BiSeNetV2
 
@@ -29,6 +34,7 @@ def train(msg: Message, context: Context):
 
     im_root: str = context.run_config["im-root"]
     client_data_partition: str = context.run_config["client-data-partition"]
+    base_path = context.run_config["base-path"]
     client_selection_log_file: str = context.run_config["client-selection-log"]
 
     num_classes: int = context.run_config["num-classes"]
@@ -41,7 +47,7 @@ def train(msg: Message, context: Context):
     # Get partition ID and server round
     partition_id = context.node_config["partition-id"]
     server_round = msg.content["config"]["server-round"]
-    
+
     # Log client participation
     log_client_partition(client_selection_log_file, server_round, partition_id)
 
@@ -75,6 +81,20 @@ def train(msg: Message, context: Context):
 
     model.cpu()
     cpu_state_dict = {k: v.cpu() for k, v in model.state_dict().items()}
+
+    # Save local model checkpoint
+    partition_name = os.path.splitext(os.path.basename(client_data_partition))[0]
+    try:
+        save_local_model(
+            model_state_dict=cpu_state_dict,
+            base_path=base_path,
+            partition_name=partition_name,
+            server_round=server_round,
+            client_id=partition_id,
+        )
+        print(f"[Client {partition_id}] Saved local model for round {server_round}.")
+    except Exception as e:
+        print(f"[Client {partition_id}] Warning: Failed to save local model: {e}")
 
     model_record = ArrayRecord(cpu_state_dict)
 
