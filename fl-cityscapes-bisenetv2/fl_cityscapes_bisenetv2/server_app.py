@@ -6,7 +6,10 @@ from flwr.serverapp import Grid, ServerApp
 
 from lib.models import BiSeNetV2
 
-from fl_cityscapes_bisenetv2.task import make_central_evaluate, make_silobn_evaluate_aggregator
+from fl_cityscapes_bisenetv2.task import (
+    make_central_evaluate,
+    make_silobn_evaluate_aggregator,
+)
 from fl_cityscapes_bisenetv2.strategies import (
     CustomFedAvg,
     CustomFedProx,
@@ -53,15 +56,22 @@ def main(grid: Grid, context: Context) -> None:
         ]
     elif strategy_name == "FedEMA":
         strategy_params["server_momentum"] = context.run_config["server-momentum"]
-    elif strategy_name == "FedSiloBN":
-        strategy_params["silobn_eval_aggregator"] = make_silobn_evaluate_aggregator(context)
+        strategy_params["neg_entropy_weight"] = context.run_config["neg-entropy-weight"]
+
+    elif strategy_name == "SiloBN":
+        strategy_params["silobn_eval_aggregator"] = make_silobn_evaluate_aggregator(
+            context
+        )
         # Pass eval_interval and rounds_trained for evaluation scheduling & resume support
         strategy_params["eval_interval"] = context.run_config["eval-interval"]
         strategy_params["rounds_trained"] = rounds_trained
         fraction_evaluate = 1.0  # Evaluate on all participating clients
-        print(f"[Server] SiloBN: Client-side evaluation enabled (fraction_evaluate={fraction_evaluate})")
-        print(f"[Server] SiloBN: Evaluation interval = {context.run_config['eval-interval']} rounds")
-
+        print(
+            f"[Server] SiloBN: Client-side evaluation enabled (fraction_evaluate={fraction_evaluate})"
+        )
+        print(
+            f"[Server] SiloBN: Evaluation interval = {context.run_config['eval-interval']} rounds"
+        )
 
     # Load global model
     global_model = BiSeNetV2(num_classes)

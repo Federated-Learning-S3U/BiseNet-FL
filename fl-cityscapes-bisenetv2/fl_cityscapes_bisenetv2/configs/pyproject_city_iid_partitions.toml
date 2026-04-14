@@ -1,10 +1,10 @@
 # FLWR TOML CONFIG FILE FOR CITYSCAPES WITH CITY PARTITIONS
 
-# Dataset Setup: 18 clients,
-# average of 165 image per client,
-# with coefficient of variation of 0.48,
+# Dataset Setup: 55 clients,
+# average of 54 images per client,
+# with coefficient of variation of 0.46, #TODO
 # indicating a moderate degree of variability in client data sizes.
-# Partition is considered to be iid based on city semantics.
+# Partition is considered to be iid based on city semantic distribution.
 
 [build-system]
 requires = ["hatchling"]
@@ -40,7 +40,7 @@ fraction-evaluate = 0.0
 # Server-side Resume Training Configs
 # IMPORTANT UPDATE ON RESUME
 resume = false
-pretrained-path = "/kaggle/working/res/latest_model.pt"
+pretrained-path = "/kaggle/working/res/latest_model.pt" # Might need to be added as an input model
 rounds-trained = 0
 
 # Strategy-specific Configs
@@ -76,7 +76,7 @@ client-device = "cuda"
 
 # Client Dataset Paths
 im-root = "/kaggle/input/cityscapes-fine-dataset"
-client-data-partition = "./datasets/cityscapes/city_partitions.json"
+client-data-partition = "./datasets/cityscapes/city_iid_partitions.json"
 
 # Model Training Hyper-Params
 local-epochs = 7 # Note, on increasing local epochs may require reducing the LR
@@ -107,6 +107,6 @@ default = "local-simulation-single-gpu"
 [tool.flwr.federations.local-simulation-single-gpu]
 options.backend.init_args.num_cpus = 2 # Number of CPUs for the simulation controller 
 options.backend.init_args.num_gpus = 1 # Number of GPUs for the simulation controller
-options.num-supernodes = 18 # Number of SuperNodes (i.e., Clients) in the Data Setup
+options.num-supernodes = 55 # Number of SuperNodes (i.e., Clients) in the Data Setup
 options.backend.client-resources.num-cpus = 2 # Number of CPUs per Client
 options.backend.client-resources.num-gpus = 1.0 # Fractional GPU allocation per Client

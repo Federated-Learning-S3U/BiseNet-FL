@@ -9,7 +9,6 @@ cfg = dict(
     max_iter=300000,
     dataset="CityScapes",
     im_root="./datasets/cityscapes",
-    # client_data_partition="./datasets/cityscapes/city_partitions.json",
     train_im_anns="./datasets/cityscapes/train.txt",
     val_im_anns="./datasets/cityscapes/val.txt",
     scales=[0.25, 2.0],
@@ -21,5 +20,7 @@ cfg = dict(
     use_fp16=True,
     use_sync_bn=True,
     respth="./res",
-    eval_every_epochs=5,
+    eval_every_epochs=1,
+    resume_from=None,
+    early_stop_patience=5,
 )

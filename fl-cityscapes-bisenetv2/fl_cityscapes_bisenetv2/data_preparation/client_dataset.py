@@ -13,7 +13,7 @@ class CityScapesClientDataset(Dataset):
     Inherits from PyTorch Dataset class to handle CityScapes data for a specific client.
     """
 
-    def __init__(self, data_root, data, metrics, transform=None):
+    def __init__(self, data_root, data, transform=None):
         """CityScapes Client Dataset Initialization
 
         Args:
@@ -23,9 +23,11 @@ class CityScapesClientDataset(Dataset):
         """
         self.data_root = data_root
         self.data = data
-        self.metrics = metrics
         self.transform = transform
-        self.to_tensor = T.ToTensor(mean=metrics["mean"], std=metrics["std"])
+        self.to_tensor = T.ToTensor(
+            mean=(0.485, 0.456, 0.406),
+            std=(0.229, 0.224, 0.225)
+        )
 
     def __len__(self):
         return len(self.data)

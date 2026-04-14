@@ -1,10 +1,10 @@
 # FLWR TOML CONFIG FILE FOR CITYSCAPES WITH CITY PARTITIONS
 
-# Dataset Setup: 18 clients,
-# average of 165 image per client,
-# with coefficient of variation of 0.48,
-# indicating a moderate degree of variability in client data sizes.
-# Partition is considered to be iid based on city semantics.
+# Dataset Setup: 10 clients,
+# average of 298 image per client,
+# with coefficient of variation of X.XX,
+# indicating a high degree of variability in client data sizes.
+# Partition is considered to be severely non-iid.
 
 [build-system]
 requires = ["hatchling"]
@@ -33,14 +33,14 @@ clientapp = "fl_cityscapes_bisenetv2.client_app:app"
 # Server-side FL configs
 server-device = "cuda"
 strategy-name = "FedAvg" # Options: FedAvg, FedAvgM, FedProx, FedEMA
-num-server-rounds = 20
+num-server-rounds = 30
 fraction-train = 0.5
 fraction-evaluate = 0.0
 
 # Server-side Resume Training Configs
 # IMPORTANT UPDATE ON RESUME
 resume = false
-pretrained-path = "/kaggle/working/res/latest_model.pt"
+pretrained-path = "/kaggle/working/res/latest_model.pt" # Might need to be added as an input model
 rounds-trained = 0
 
 # Strategy-specific Configs
@@ -76,7 +76,7 @@ client-device = "cuda"
 
 # Client Dataset Paths
 im-root = "/kaggle/input/cityscapes-fine-dataset"
-client-data-partition = "./datasets/cityscapes/city_partitions.json"
+client-data-partition = "./datasets/cityscapes/non_iid_partition_new.json"
 
 # Model Training Hyper-Params
 local-epochs = 7 # Note, on increasing local epochs may require reducing the LR
@@ -107,6 +107,6 @@ default = "local-simulation-single-gpu"
 [tool.flwr.federations.local-simulation-single-gpu]
 options.backend.init_args.num_cpus = 2 # Number of CPUs for the simulation controller 
 options.backend.init_args.num_gpus = 1 # Number of GPUs for the simulation controller
-options.num-supernodes = 18 # Number of SuperNodes (i.e., Clients) in the Data Setup
+options.num-supernodes = 10 # Number of SuperNodes (i.e., Clients) in the Data Setup
 options.backend.client-resources.num-cpus = 2 # Number of CPUs per Client
 options.backend.client-resources.num-gpus = 1.0 # Fractional GPU allocation per Client

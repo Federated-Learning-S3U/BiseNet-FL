@@ -19,7 +19,18 @@ from fl_cityscapes_bisenetv2.utils.model_utils import set_optimizer
 from fl_cityscapes_bisenetv2.data_preparation.utils import aggregate_client_metrics
 
 
-def train(net, trainloader, epochs, lr, wd, device, num_aux_heads, strategy, prox_mu):
+def train(
+    net,
+    trainloader,
+    epochs,
+    lr,
+    wd,
+    device,
+    num_aux_heads,
+    strategy,
+    prox_mu,
+    neg_entropy_weight: float = 0.0,
+):
     """Train the model on the training set."""
     global_weights = None
     if strategy == "FedProx":
@@ -36,6 +47,7 @@ def train(net, trainloader, epochs, lr, wd, device, num_aux_heads, strategy, pro
 
     net.train()
     running_loss = 0.0
+    train_loss_pre = 0.0
     for _ in range(epochs):
         for im, lb in trainloader:
             images = im.to(device)
@@ -53,22 +65,33 @@ def train(net, trainloader, epochs, lr, wd, device, num_aux_heads, strategy, pro
                 loss = loss_pre + sum(loss_aux)
 
                 # FedProx: add proximal term to the loss
-                if strategy == "FedProx":
+                if strategy == "FedProx" and prox_mu > 0.0:
                     proximal_term = 0.0
                     local_weights = list(net.parameters())
                     for w, w_t in zip(local_weights, global_weights):
                         proximal_term += (w - w_t).norm(2)
                     loss += (prox_mu / 2) * proximal_term
 
+                # Negative-entropy regularization (encourages confident predictions)
+                if strategy == "FedEMA" and neg_entropy_weight > 0.0:
+                    probs = torch.softmax(logits, dim=1)
+                    log_probs = torch.log_softmax(logits, dim=1)
+                    # Average negative entropy over batch and pixels
+                    neg_entropy = (probs * log_probs).sum(dim=1).mean()
+                    loss = loss + neg_entropy_weight * neg_entropy
+
             scaler.scale(loss).backward()
+
             scaler.step(optimizer)
             scaler.update()
 
             running_loss += loss.item()
+            train_loss_pre += loss_pre.item()
 
     avg_trainloss = running_loss / (len(trainloader) * epochs)
+    train_loss_pre = train_loss_pre / (len(trainloader) * epochs)
 
-    return avg_trainloss
+    return avg_trainloss, train_loss_pre
 
 
 def test(net, testloader, device, num_classes, lb_ignore=255):
@@ -132,9 +155,6 @@ def make_central_evaluate(context: Context):
     client_data_partition = context.run_config["client-data-partition"]
     strategy_name = context.run_config["strategy-name"]
 
-    data_mean, data_std = aggregate_client_metrics(client_data_partition)
-    data_metrics = {"mean": data_mean, "std": data_std}
-
     def central_evaluate(server_round: int, arrays: ArrayRecord) -> MetricRecord:
         """Evaluate the global model on the server side (optional).
         
@@ -178,7 +198,6 @@ def make_central_evaluate(context: Context):
         eval_loader = load_server_eval_data(
             data_root=im_root,
             data_file=server_data_partition,
-            normalization_metrics=data_metrics,
             batch_size=eval_batch_size,
         )
 
