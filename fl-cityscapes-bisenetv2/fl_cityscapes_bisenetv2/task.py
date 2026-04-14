@@ -17,6 +17,7 @@ from tools.eval_metrics import compute_metrics_from_cm
 from fl_cityscapes_bisenetv2.data_preparation.datasets import load_server_eval_data
 from fl_cityscapes_bisenetv2.utils.model_utils import set_optimizer
 from fl_cityscapes_bisenetv2.data_preparation.utils import aggregate_client_metrics
+from fl_cityscapes_bisenetv2.utils.bn_utils import extract_bn_statistics
 
 
 def train(
@@ -157,7 +158,7 @@ def make_central_evaluate(context: Context):
 
     def central_evaluate(server_round: int, arrays: ArrayRecord) -> MetricRecord:
         """Evaluate the global model on the server side (optional).
-        
+
         For SiloBN: Server evaluation is skipped as BN statistics are siloed on clients.
         Instead, evaluation is performed on clients and results are aggregated by the strategy.
         """
@@ -179,20 +180,14 @@ def make_central_evaluate(context: Context):
         if server_round == 0 or server_round % eval_interval != 0:
             return MetricRecord({})
 
-        # For SiloBN: Skip server-side evaluation
-        # Evaluation happens on clients and is aggregated by the strategy
-        if strategy_name == "FedSiloBN":
-            print(f"[SiloBN] Round {rounds_trained + server_round}: Server-side evaluation skipped.")
-            print(f"[SiloBN] Evaluation is performed on clients with their local BN statistics.")
-            # Return empty metrics - the strategy will provide aggregated client metrics
-            return MetricRecord({})
-
         device = torch.device(server_device)
 
         # Load Global Model
         model = BiSeNetV2(num_classes).cpu()
         sd = arrays.to_torch_state_dict()
-        model.load_state_dict(sd, strict=True)
+
+        is_strict = False if strategy_name == "FedSiloBN" else True
+        model.load_state_dict(sd, strict=is_strict)
 
         # Load the entire Cityscapes val dataset
         eval_loader = load_server_eval_data(
@@ -203,11 +198,18 @@ def make_central_evaluate(context: Context):
 
         metrics = {}
 
-        # Evaluate the model on the test set
+        # Evaluate Model on Test Set
         try:
             model.to(device)
-            metrics = test(model, eval_loader, device, num_classes, lb_ignore)
 
+            # For SiloBN: We need to adapt the Server Model to the BN statistics of the Server Data
+            if strategy_name == "FedSiloBN":
+                from torch.optim.swa_utils import update_bn
+
+                print("[SiloBN] Computing BN statistics on validation data...")
+                update_bn(eval_loader, model, device=device)
+
+            metrics = test(model, eval_loader, device, num_classes, lb_ignore)
         finally:
             try:
                 model.cpu()
@@ -253,127 +255,3 @@ def make_central_evaluate(context: Context):
         return MetricRecord(metrics)
 
     return central_evaluate
-
-
-def make_silobn_evaluate_aggregator(context: Context):
-    """Create an evaluation aggregator for SiloBN that handles client evaluation results.
-    
-    In SiloBN, since BN statistics are siloed on clients, evaluation must be performed
-    on clients with their local BN statistics. This function creates an aggregator that:
-    1. Receives evaluation metrics from all clients
-    2. Averages the metrics (weighted by number of examples)
-    3. Saves models based on aggregated mIoU
-    """
-
-    best_miou = context.run_config["best-miou"]
-    best_miou = {"value": best_miou}
-
-    save_latest = context.run_config["save-latest"]
-    save_best = context.run_config["save-best"]
-    best_metric_file = context.run_config["best-metric"]
-    latest_metric_file = context.run_config["latest-metric"]
-    rounds_trained = context.run_config["rounds-trained"]
-
-    def aggregate_client_eval_results(
-        server_round: int,
-        arrays: ArrayRecord,
-        client_metrics: list[dict],
-    ) -> MetricRecord:
-        """Aggregate evaluation results from all clients.
-        
-        Args:
-            server_round: Current server round
-            arrays: Server model arrays (for saving)
-            client_metrics: List of dicts containing metrics from each client
-            
-        Returns:
-            Aggregated metrics as MetricRecord
-        """
-        if not client_metrics:
-            print(f"[SiloBN] Round {rounds_trained + server_round}: No client evaluation results received.")
-            return MetricRecord({})
-
-        # Aggregate metrics weighted by number of examples
-        total_examples = 0
-        weighted_miou = 0.0
-        weighted_loss = 0.0
-        
-        # Per-class IoU aggregation
-        all_class_ious = []
-        
-        for metrics in client_metrics:
-            num_examples = metrics.get("num-examples", 1)
-            miou = metrics.get("mIoU", 0.0)
-            val_loss = metrics.get("val_loss", 0.0)
-            class_ious = metrics.get("class_ious", None)
-            
-            total_examples += num_examples
-            weighted_miou += miou * num_examples
-            weighted_loss += val_loss * num_examples
-            
-            if class_ious is not None:
-                all_class_ious.append((class_ious, num_examples))
-
-        if total_examples == 0:
-            return MetricRecord({})
-
-        avg_miou = weighted_miou / total_examples
-        avg_loss = weighted_loss / total_examples
-        
-        # Average class IoUs if available
-        avg_class_ious = None
-        if all_class_ious:
-            # Simple average of class IoUs (could also do weighted)
-            avg_class_ious = np.zeros_like(all_class_ious[0][0])
-            total_weight = sum(w for _, w in all_class_ious)
-            for ious, weight in all_class_ious:
-                avg_class_ious += ious * weight
-            avg_class_ious /= total_weight
-
-        print(f"[SiloBN] Round {rounds_trained + server_round}: Aggregated client evaluation results")
-        print(f"[SiloBN] Aggregated mIoU: {avg_miou:.4f} from {len(client_metrics)} clients ({total_examples} total examples)")
-
-        # Save model checkpoints
-        state_dict = arrays.to_torch_state_dict()
-
-        torch.save(state_dict, save_latest)
-        with open(latest_metric_file, "w") as f:
-            json.dump(
-                {"mIoU": avg_miou, "round": rounds_trained + server_round},
-                f,
-                indent=4,
-            )
-        print(
-            f"[SiloBN] Saved latest model and updated {latest_metric_file} "
-            f"(best {best_miou['value']:.4f})"
-        )
-
-        if avg_miou > best_miou["value"]:
-            torch.save(state_dict, save_best)
-            print(f"[SiloBN] 🎉 New best mIoU {avg_miou:.4f}")
-            best_miou["value"] = avg_miou
-
-            with open(best_metric_file, "w") as f:
-                json.dump(
-                    {"best_miou": avg_miou, "round": rounds_trained + server_round},
-                    f,
-                    indent=4,
-                )
-
-            print(
-                f"[SiloBN] New best mIoU {avg_miou:.4f}, saved model and updated {best_metric_file}"
-            )
-
-        aggregated_metrics = {
-            "mIoU": avg_miou,
-            "val_loss": avg_loss,
-            "num-examples": total_examples,
-            "num-clients": len(client_metrics),
-        }
-        
-        if avg_class_ious is not None:
-            aggregated_metrics["class_ious"] = avg_class_ious.tolist()
-
-        return MetricRecord(aggregated_metrics)
-
-    return aggregate_client_eval_results

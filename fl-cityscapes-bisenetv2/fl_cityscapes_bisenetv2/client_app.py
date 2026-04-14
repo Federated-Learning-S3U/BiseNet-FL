@@ -48,7 +48,6 @@ def train(msg: Message, context: Context):
     strategy_name: str = context.run_config["strategy-name"]
 
     # SiloBN resume training configs
-    rounds_trained: int = context.run_config.get("rounds-trained", 0)
     client_bn_stats_dir: str = context.run_config.get(
         "client-bn-stats-dir", "./res/client_bn_stats"
     )
@@ -84,26 +83,18 @@ def train(msg: Message, context: Context):
             print(
                 f"[Client {partition_id}] SiloBN: Using in-memory local BN statistics"
             )
-        elif rounds_trained > 0:
+        elif disk_bn_stats := load_client_bn_stats(client_bn_stats_dir, partition_id):
             # Resume training: try to load BN stats from disk
-            disk_bn_stats = load_client_bn_stats(client_bn_stats_dir, partition_id)
-            if disk_bn_stats is not None:
-                # Merge server learnable params with loaded local BN statistics
-                merged_state_dict = merge_with_local_bn_stats(
-                    server_state_dict, disk_bn_stats
-                )
-                model.load_state_dict(merged_state_dict)
-                # Also store in context.state for subsequent rounds
-                context.state["local_bn_statistics"] = ArrayRecord(disk_bn_stats)
-                print(
-                    f"[Client {partition_id}] SiloBN Resume: Loaded {len(disk_bn_stats)} BN stats from disk"
-                )
-            else:
-                # Resuming but no saved BN stats found - use defaults
-                model.load_state_dict(server_state_dict, strict=False)
-                print(
-                    f"[Client {partition_id}] SiloBN Resume: No saved BN stats found, using defaults"
-                )
+            # Merge server learnable params with loaded local BN statistics
+            merged_state_dict = merge_with_local_bn_stats(
+                server_state_dict, disk_bn_stats
+            )
+            model.load_state_dict(merged_state_dict)
+            # Also store in context.state for subsequent rounds
+            context.state["local_bn_statistics"] = ArrayRecord(disk_bn_stats)
+            print(
+                f"[Client {partition_id}] SiloBN Resume: Loaded {len(disk_bn_stats)} BN stats from disk"
+            )
         else:
             # First participation for this client - no local BN stats yet
             # Server may send full params (round 1) or only learnable params (round 2+)
@@ -196,104 +187,104 @@ def train(msg: Message, context: Context):
     return Message(content=content, reply_to=msg)
 
 
-@app.evaluate()
-def evaluate(msg: Message, context: Context):
-    """Evaluate the model on local data (used for SiloBN client-side evaluation)."""
-    from fl_cityscapes_bisenetv2.task import test as test_fn
-    from fl_cityscapes_bisenetv2.data_preparation.datasets import load_server_eval_data
-    from fl_cityscapes_bisenetv2.data_preparation.utils import aggregate_client_metrics
+# @app.evaluate()
+# def evaluate(msg: Message, context: Context):
+#     """Evaluate the model on local data (used for SiloBN client-side evaluation)."""
+#     from fl_cityscapes_bisenetv2.task import test as test_fn
+#     from fl_cityscapes_bisenetv2.data_preparation.datasets import load_server_eval_data
+#     from fl_cityscapes_bisenetv2.data_preparation.utils import aggregate_client_metrics
 
-    # Read run config
-    eval_batch_size: int = context.run_config["eval-batch-size"]
-    im_root: str = context.run_config["im-root"]
-    server_data_partition: str = context.run_config["server-data-partition"]
-    client_data_partition: str = context.run_config["client-data-partition"]
-    num_classes: int = context.run_config["num-classes"]
-    lb_ignore: int = context.run_config["lb-ignore"]
-    strategy_name: str = context.run_config["strategy-name"]
+#     # Read run config
+#     eval_batch_size: int = context.run_config["eval-batch-size"]
+#     im_root: str = context.run_config["im-root"]
+#     server_data_partition: str = context.run_config["server-data-partition"]
+#     client_data_partition: str = context.run_config["client-data-partition"]
+#     num_classes: int = context.run_config["num-classes"]
+#     lb_ignore: int = context.run_config["lb-ignore"]
+#     strategy_name: str = context.run_config["strategy-name"]
 
-    # SiloBN resume training configs
-    rounds_trained: int = context.run_config.get("rounds-trained", 0)
-    client_bn_stats_dir: str = context.run_config.get(
-        "client-bn-stats-dir", "./res/client_bn_stats"
-    )
+#     # SiloBN resume training configs
+#     rounds_trained: int = context.run_config.get("rounds-trained", 0)
+#     client_bn_stats_dir: str = context.run_config.get(
+#         "client-bn-stats-dir", "./res/client_bn_stats"
+#     )
 
-    partition_id = context.node_config["partition-id"]
+#     partition_id = context.node_config["partition-id"]
 
-    # Load the model
-    model = BiSeNetV2(num_classes)
-    server_state_dict = msg.content["arrays"].to_torch_state_dict()
+#     # Load the model
+#     model = BiSeNetV2(num_classes)
+#     server_state_dict = msg.content["arrays"].to_torch_state_dict()
 
-    # For SiloBN: merge server params with local BN statistics
-    if strategy_name == "FedSiloBN":
-        local_bn_record = context.state.get("local_bn_statistics", None)
+#     # For SiloBN: merge server params with local BN statistics
+#     if strategy_name == "FedSiloBN":
+#         local_bn_record = context.state.get("local_bn_statistics", None)
 
-        if local_bn_record is not None:
-            local_bn_stats = local_bn_record.to_torch_state_dict()
-            merged_state_dict = merge_with_local_bn_stats(
-                server_state_dict, local_bn_stats
-            )
-            model.load_state_dict(merged_state_dict)
-            print(
-                f"[Client {partition_id}] SiloBN Eval: Using in-memory local BN statistics"
-            )
-        elif rounds_trained > 0:
-            # Resume training: try to load BN stats from disk
-            disk_bn_stats = load_client_bn_stats(client_bn_stats_dir, partition_id)
-            if disk_bn_stats is not None:
-                merged_state_dict = merge_with_local_bn_stats(
-                    server_state_dict, disk_bn_stats
-                )
-                model.load_state_dict(merged_state_dict)
-                # Also store in context.state for subsequent operations
-                context.state["local_bn_statistics"] = ArrayRecord(disk_bn_stats)
-                print(
-                    f"[Client {partition_id}] SiloBN Eval Resume: Loaded BN stats from disk"
-                )
-            else:
-                model.load_state_dict(server_state_dict, strict=False)
-                print(
-                    f"[Client {partition_id}] SiloBN Eval Resume: No saved BN stats, using defaults"
-                )
-        else:
-            # First eval - no local BN stats, use default
-            model.load_state_dict(server_state_dict, strict=False)
-            print(
-                f"[Client {partition_id}] SiloBN Eval: Using default BN statistics (first eval)"
-            )
-    else:
-        model.load_state_dict(server_state_dict)
+#         if local_bn_record is not None:
+#             local_bn_stats = local_bn_record.to_torch_state_dict()
+#             merged_state_dict = merge_with_local_bn_stats(
+#                 server_state_dict, local_bn_stats
+#             )
+#             model.load_state_dict(merged_state_dict)
+#             print(
+#                 f"[Client {partition_id}] SiloBN Eval: Using in-memory local BN statistics"
+#             )
+#         elif rounds_trained > 0:
+#             # Resume training: try to load BN stats from disk
+#             disk_bn_stats = load_client_bn_stats(client_bn_stats_dir, partition_id)
+#             if disk_bn_stats is not None:
+#                 merged_state_dict = merge_with_local_bn_stats(
+#                     server_state_dict, disk_bn_stats
+#                 )
+#                 model.load_state_dict(merged_state_dict)
+#                 # Also store in context.state for subsequent operations
+#                 context.state["local_bn_statistics"] = ArrayRecord(disk_bn_stats)
+#                 print(
+#                     f"[Client {partition_id}] SiloBN Eval Resume: Loaded BN stats from disk"
+#                 )
+#             else:
+#                 model.load_state_dict(server_state_dict, strict=False)
+#                 print(
+#                     f"[Client {partition_id}] SiloBN Eval Resume: No saved BN stats, using defaults"
+#                 )
+#         else:
+#             # First eval - no local BN stats, use default
+#             model.load_state_dict(server_state_dict, strict=False)
+#             print(
+#                 f"[Client {partition_id}] SiloBN Eval: Using default BN statistics (first eval)"
+#             )
+#     else:
+#         model.load_state_dict(server_state_dict)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.to(device)
+#     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+#     model.to(device)
 
-    # Load the server eval data (full validation set)
-    data_mean, data_std = aggregate_client_metrics(client_data_partition)
-    data_metrics = {"mean": data_mean, "std": data_std}
+#     # Load the server eval data (full validation set)
+#     data_mean, data_std = aggregate_client_metrics(client_data_partition)
+#     data_metrics = {"mean": data_mean, "std": data_std}
 
-    eval_loader = load_server_eval_data(
-        data_root=im_root,
-        data_file=server_data_partition,
-        normalization_metrics=data_metrics,
-        batch_size=eval_batch_size,
-    )
+#     eval_loader = load_server_eval_data(
+#         data_root=im_root,
+#         data_file=server_data_partition,
+#         normalization_metrics=data_metrics,
+#         batch_size=eval_batch_size,
+#     )
 
-    # Evaluate the model
-    metrics = test_fn(model, eval_loader, device, num_classes, lb_ignore)
-    print(
-        f"[Client {partition_id}] Evaluation completed. mIoU: {metrics.get('mIoU', 0.0):.4f}"
-    )
+#     # Evaluate the model
+#     metrics = test_fn(model, eval_loader, device, num_classes, lb_ignore)
+#     print(
+#         f"[Client {partition_id}] Evaluation completed. mIoU: {metrics.get('mIoU', 0.0):.4f}"
+#     )
 
-    # Clean up
-    model.cpu()
-    del model
-    gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-        torch.cuda.synchronize()
+#     # Clean up
+#     model.cpu()
+#     del model
+#     gc.collect()
+#     if torch.cuda.is_available():
+#         torch.cuda.empty_cache()
+#         torch.cuda.synchronize()
 
-    # Construct and return reply Message
-    metrics["num-examples"] = len(eval_loader.dataset)
-    metric_record = MetricRecord(metrics)
-    content = RecordDict({"metrics": metric_record})
-    return Message(content=content, reply_to=msg)
+#     # Construct and return reply Message
+#     metrics["num-examples"] = len(eval_loader.dataset)
+#     metric_record = MetricRecord(metrics)
+#     content = RecordDict({"metrics": metric_record})
+#     return Message(content=content, reply_to=msg)

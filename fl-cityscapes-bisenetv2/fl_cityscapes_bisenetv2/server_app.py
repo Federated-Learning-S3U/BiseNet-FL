@@ -8,7 +8,6 @@ from lib.models import BiSeNetV2
 
 from fl_cityscapes_bisenetv2.task import (
     make_central_evaluate,
-    make_silobn_evaluate_aggregator,
 )
 from fl_cityscapes_bisenetv2.strategies import (
     CustomFedAvg,
@@ -29,7 +28,6 @@ def main(grid: Grid, context: Context) -> None:
     # Read run config
     num_rounds: int = context.run_config["num-server-rounds"]
     fraction_train: float = context.run_config["fraction-train"]
-    fraction_evaluate: float = context.run_config["fraction-evaluate"]
 
     num_classes: int = context.run_config["num-classes"]
 
@@ -49,29 +47,16 @@ def main(grid: Grid, context: Context) -> None:
     strategy_params = {}
     if strategy_name == "FedProx":
         strategy_params["proximal_mu"] = context.run_config["proximity-mu"]
+
     elif strategy_name == "FedAvgM":
         strategy_params["server_momentum"] = context.run_config["server-momentum"]
         strategy_params["server_learning_rate"] = context.run_config[
             "server-learning-rate"
         ]
+
     elif strategy_name == "FedEMA":
         strategy_params["server_momentum"] = context.run_config["server-momentum"]
         strategy_params["neg_entropy_weight"] = context.run_config["neg-entropy-weight"]
-
-    elif strategy_name == "FedSiloBN":
-        strategy_params["silobn_eval_aggregator"] = make_silobn_evaluate_aggregator(
-            context
-        )
-        # Pass eval_interval and rounds_trained for evaluation scheduling & resume support
-        strategy_params["eval_interval"] = context.run_config["eval-interval"]
-        strategy_params["rounds_trained"] = rounds_trained
-        fraction_evaluate = 1.0  # Evaluate on all participating clients
-        print(
-            f"[Server] SiloBN: Client-side evaluation enabled (fraction_evaluate={fraction_evaluate})"
-        )
-        print(
-            f"[Server] SiloBN: Evaluation interval = {context.run_config['eval-interval']} rounds"
-        )
 
     # Load global model
     global_model = BiSeNetV2(num_classes)
@@ -80,7 +65,8 @@ def main(grid: Grid, context: Context) -> None:
     if resume:
         print(f"[Server] Resuming from pretrained model at {pretrained_path}")
         sd = torch.load(pretrained_path, map_location="cpu")
-        global_model.load_state_dict(sd, strict=True)
+        is_strict = False if strategy_name == "FedSiloBN" else True
+        global_model.load_state_dict(sd, strict=is_strict)
         print(f"[Server] Pretrained model trained on {rounds_trained} rounds.")
     # Else start from random initialized model
     else:
@@ -95,7 +81,7 @@ def main(grid: Grid, context: Context) -> None:
     # Initialize Custom strategy
     strategy = eval(custom_strategy_name)(
         fraction_train=fraction_train,
-        fraction_evaluate=fraction_evaluate,
+        fraction_evaluate=0.0,
         lr_schedule_file=lr_schedule_file,
         lr_decay_factor=lr_decay_factor,
         lr_decay_rounds=lr_decay_rounds,
