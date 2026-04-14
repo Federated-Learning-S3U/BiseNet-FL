@@ -58,7 +58,7 @@ def main(grid: Grid, context: Context) -> None:
         strategy_params["server_momentum"] = context.run_config["server-momentum"]
         strategy_params["neg_entropy_weight"] = context.run_config["neg-entropy-weight"]
 
-    elif strategy_name == "SiloBN":
+    elif strategy_name == "FedSiloBN":
         strategy_params["silobn_eval_aggregator"] = make_silobn_evaluate_aggregator(
             context
         )
