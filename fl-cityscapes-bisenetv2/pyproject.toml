@@ -1,4 +1,10 @@
-# FLWR TOML CONFIG FILE
+# FLWR TOML CONFIG FILE FOR CITYSCAPES WITH CITY PARTITIONS
+
+# Dataset Setup: 10 clients,
+# average of 298 image per client,
+# with coefficient of variation of X.XX,
+# indicating a very low degree of variability in client data sizes.
+# Partition is considered to be iid.
 
 [build-system]
 requires = ["hatchling"]
@@ -26,20 +32,20 @@ clientapp = "fl_cityscapes_bisenetv2.client_app:app"
 
 # Server-side FL configs
 server-device = "cuda"
-strategy-name = "FedAvg" # Options: FedAvg, FedAvgM, FedProx, FedEMA
-num-server-rounds = 4
-fraction-train = 0.4
+strategy-name = "FedSiloBN" # Options: FedAvg, FedAvgM, FedProx, FedEMA
+num-server-rounds = 5
+fraction-train = 0.5
 fraction-evaluate = 0.0
 
 # Server-side Resume Training Configs
 # IMPORTANT UPDATE ON RESUME
 resume = false
 pretrained-path = "./res/latest_model.pt"
-rounds-trained = 0 
+rounds-trained = 0
 
 # Strategy-specific Configs
-# FedAvgM / FedEMA Shared Configs
-server-momentum = 0.5
+# FedAvgM / FedEMA Shared Configs 
+server-momentum = 0.95
 
 # FedEMA Specific Configs
 neg-entropy-weight = 0.001
@@ -51,7 +57,7 @@ server-learning-rate = 1.0
 proximity-mu = 0.005
 
 # Server-side Evaluation Configs
-eval-batch-size = 1
+eval-batch-size = 2
 eval-interval = 1
 server-data-partition = "./datasets/cityscapes/val.txt"
 
@@ -64,6 +70,11 @@ client-selection-log = "./res/client_selection_log.json"
 best-miou = 0.0 # IMPORTANT UPDATE ON RESUME
 best-metric = "./res/best_metric.json"
 latest-metric = "./res/latest_metric.json"
+
+# Client-side BN Stats saved for each round for all clients (FedSiloBN analysis)
+client-bn-stats-dir = "./res/client_bn_stats"
+# Client-side BN Stats Analysis Configs (for FedSiloBN analysis)
+client-bn-stats-history = "./res/client_bn_stats_history.json"
 
 # Client-side FL Configs
 client-device = "cuda"
@@ -101,6 +112,6 @@ default = "local-simulation-single-gpu"
 [tool.flwr.federations.local-simulation-single-gpu]
 options.backend.init_args.num_cpus = 2 # Number of CPUs for the simulation controller 
 options.backend.init_args.num_gpus = 1 # Number of GPUs for the simulation controller
-options.num-supernodes = 18 # Number of SuperNodes (i.e., Clients) in the Data Setup
+options.num-supernodes = 10 # Number of SuperNodes (i.e., Clients) in the Data Setup
 options.backend.client-resources.num-cpus = 2 # Number of CPUs per Client
 options.backend.client-resources.num-gpus = 1.0 # Fractional GPU allocation per Client

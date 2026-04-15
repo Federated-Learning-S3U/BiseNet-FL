@@ -15,6 +15,7 @@ from fl_cityscapes_bisenetv2.utils.bn_utils import (
     merge_with_local_bn_stats,
     save_client_bn_stats,
     load_client_bn_stats,
+    save_client_bn_stats_to_history,
 )
 from fl_cityscapes_bisenetv2.utils.clients_logging import log_client_partition
 
@@ -48,9 +49,10 @@ def train(msg: Message, context: Context):
     strategy_name: str = context.run_config["strategy-name"]
 
     # SiloBN resume training configs
-    client_bn_stats_dir: str = context.run_config.get(
-        "client-bn-stats-dir", "./res/client_bn_stats"
-    )
+    client_bn_stats_dir: str = context.run_config["client-bn-stats-dir"]
+
+    # SiloBN analysis configs
+    client_bn_stats_history: str = context.run_config["client-bn-stats-history"]
 
     # Get partition ID and server round
     partition_id = context.node_config["partition-id"]
@@ -152,6 +154,19 @@ def train(msg: Message, context: Context):
             f"[Client {partition_id}] SiloBN: Stored {len(local_bn_stats)} local BN statistics"
         )
         print(f"[Client {partition_id}] SiloBN: Saved BN stats to {save_path}")
+
+        # Save to history for analysis (tracks BN stats changes over time)
+        try:
+            history_path = save_client_bn_stats_to_history(
+                local_bn_stats, client_bn_stats_history, partition_id, server_round
+            )
+            print(
+                f"[Client {partition_id}] SiloBN: Saved BN stats history to {history_path}"
+            )
+        except Exception as e:
+            print(
+                f"[Client {partition_id}] SiloBN: Warning - Failed to save to history: {e}"
+            )
 
         # Filter out BN statistics before sending to server
         filtered_state_dict = filter_bn_statistics(cpu_state_dict)

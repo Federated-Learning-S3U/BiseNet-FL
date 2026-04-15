@@ -5,6 +5,8 @@ This module provides utilities for identifying and handling BatchNorm parameters
 in federated learning settings.
 """
 
+import json
+import os
 import torch
 import torch.nn as nn
 from typing import Dict, List, Tuple
@@ -13,10 +15,10 @@ from typing import Dict, List, Tuple
 def get_bn_layer_names(model: nn.Module) -> List[str]:
     """
     Get names of all BatchNorm layers in the model.
-    
+
     Args:
         model: PyTorch model
-        
+
     Returns:
         List of BatchNorm layer names
     """
@@ -30,15 +32,15 @@ def get_bn_layer_names(model: nn.Module) -> List[str]:
 def get_bn_param_names(model: nn.Module) -> List[str]:
     """
     Get names of all BatchNorm parameters in the model.
-    
+
     Args:
         model: PyTorch model
-        
+
     Returns:
         List of BatchNorm parameter names (including buffers like running_mean)
     """
     bn_param_names = []
-    
+
     for name, module in model.named_modules():
         if isinstance(module, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)):
             # Add trainable parameters
@@ -48,68 +50,67 @@ def get_bn_param_names(model: nn.Module) -> List[str]:
             bn_param_names.append(f"{name}.running_mean")
             bn_param_names.append(f"{name}.running_var")
             bn_param_names.append(f"{name}.num_batches_tracked")
-    
+
     return bn_param_names
 
 
 def split_state_dict_by_bn(
-    state_dict: Dict[str, torch.Tensor], 
-    model: nn.Module
+    state_dict: Dict[str, torch.Tensor], model: nn.Module
 ) -> Tuple[Dict[str, torch.Tensor], Dict[str, torch.Tensor]]:
     """
     Split a state dict into BN and non-BN parameters.
-    
+
     Args:
         state_dict: Model state dictionary
         model: PyTorch model (used to identify BN layers)
-        
+
     Returns:
         Tuple of (non_bn_state_dict, bn_state_dict)
     """
     bn_param_names = set(get_bn_param_names(model))
-    
+
     non_bn_params = {}
     bn_params = {}
-    
+
     for key, value in state_dict.items():
         if key in bn_param_names:
             bn_params[key] = value
         else:
             non_bn_params[key] = value
-    
+
     return non_bn_params, bn_params
 
 
 def count_bn_parameters(model: nn.Module) -> Tuple[int, int]:
     """
     Count the number of BN and non-BN parameters in the model.
-    
+
     Args:
         model: PyTorch model
-        
+
     Returns:
         Tuple of (num_non_bn_params, num_bn_params)
     """
     bn_param_names = set(get_bn_param_names(model))
-    
+
     num_bn = 0
     num_non_bn = 0
-    
+
     for name, param in model.state_dict().items():
         if name in bn_param_names:
             num_bn += param.numel()
         else:
             num_non_bn += param.numel()
-    
+
     return num_non_bn, num_bn
 
 
 def freeze_bn_layers(model: nn.Module) -> None:
     """
     Freeze all BatchNorm layers in the model (set to eval mode).
-    
+
     This prevents BN statistics from being updated during training.
-    
+
     Args:
         model: PyTorch model
     """
@@ -124,7 +125,7 @@ def freeze_bn_layers(model: nn.Module) -> None:
 def unfreeze_bn_layers(model: nn.Module) -> None:
     """
     Unfreeze all BatchNorm layers in the model.
-    
+
     Args:
         model: PyTorch model
     """
@@ -138,7 +139,7 @@ def unfreeze_bn_layers(model: nn.Module) -> None:
 def reset_bn_stats(model: nn.Module) -> None:
     """
     Reset running statistics of all BatchNorm layers.
-    
+
     Args:
         model: PyTorch model
     """
@@ -152,51 +153,50 @@ def reset_bn_stats(model: nn.Module) -> None:
 # Useful in FL strategies where we only have state_dict keys
 # =============================================================================
 
+
 def is_bn_statistic(param_name: str) -> bool:
     """
     Check if a parameter name corresponds to a BatchNorm STATISTIC (non-learnable).
-    
+
     Only these should be kept local in SiloBN:
     - 'running_mean' - Running mean estimate (non-learnable)
     - 'running_var' - Running variance estimate (non-learnable)
     - 'num_batches_tracked' - Counter for batches seen (non-learnable)
-    
+
     Note: BN weight (gamma) and bias (beta) ARE learnable and should be aggregated.
-    
+
     Args:
         param_name: Name of the parameter
-        
+
     Returns:
         True if parameter is a BN statistic (should be kept local in SiloBN)
     """
-    bn_statistic_keywords = [
-        'running_mean',
-        'running_var', 
-        'num_batches_tracked'
-    ]
-    
+    bn_statistic_keywords = ["running_mean", "running_var", "num_batches_tracked"]
+
     param_lower = param_name.lower()
-    
+
     for keyword in bn_statistic_keywords:
         if keyword in param_lower:
             return True
-    
+
     return False
 
 
-def filter_bn_statistics(state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+def filter_bn_statistics(
+    state_dict: Dict[str, torch.Tensor],
+) -> Dict[str, torch.Tensor]:
     """
     Filter out BN statistics from a state dict, keeping only learnable parameters.
-    
+
     Use this on the CLIENT SIDE before sending parameters to server in SiloBN.
-    
+
     Args:
         state_dict: Full model state dict from model.state_dict()
-        
+
     Returns:
         Filtered state dict containing only learnable parameters
         (Conv, FC, BN gamma/beta) - NO running_mean/var/num_batches_tracked
-    
+
     Example usage in client:
         full_state_dict = model.state_dict()
         filtered_state_dict = filter_bn_statistics(full_state_dict)
@@ -205,13 +205,15 @@ def filter_bn_statistics(state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch
     return {k: v for k, v in state_dict.items() if not is_bn_statistic(k)}
 
 
-def extract_bn_statistics(state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+def extract_bn_statistics(
+    state_dict: Dict[str, torch.Tensor],
+) -> Dict[str, torch.Tensor]:
     """
     Extract only BN statistics from a state dict.
-    
+
     Args:
         state_dict: Full model state dict
-        
+
     Returns:
         Dict containing only BN statistics (running_mean, running_var, num_batches_tracked)
     """
@@ -219,22 +221,21 @@ def extract_bn_statistics(state_dict: Dict[str, torch.Tensor]) -> Dict[str, torc
 
 
 def merge_with_local_bn_stats(
-    server_state_dict: Dict[str, torch.Tensor],
-    local_bn_stats: Dict[str, torch.Tensor]
+    server_state_dict: Dict[str, torch.Tensor], local_bn_stats: Dict[str, torch.Tensor]
 ) -> Dict[str, torch.Tensor]:
     """
     Merge server parameters with local BN statistics.
-    
+
     Use this on the CLIENT SIDE after receiving parameters from the server
     to preserve local BN statistics in SiloBN.
-    
+
     Args:
         server_state_dict: State dict received from server (no BN statistics)
         local_bn_stats: Local BN statistics to preserve
-        
+
     Returns:
         Merged state dict with server's learnable params and local BN statistics
-    
+
     Example usage in client:
         server_params = msg.content["arrays"].to_torch_state_dict()
         merged_params = merge_with_local_bn_stats(server_params, local_bn_stats)
@@ -256,11 +257,11 @@ import os
 def get_client_bn_stats_path(save_dir: str, partition_id: int) -> str:
     """
     Get the file path for a client's BN statistics.
-    
+
     Args:
         save_dir: Directory where client BN stats are saved
         partition_id: Client partition ID
-        
+
     Returns:
         Path to the client's BN statistics file
     """
@@ -274,22 +275,22 @@ def save_client_bn_stats(
 ) -> str:
     """
     Save client BN statistics to disk for resume training support.
-    
+
     Args:
         bn_stats: Dictionary of BN statistics (running_mean, running_var, etc.)
         save_dir: Directory to save the file
         partition_id: Client partition ID
-        
+
     Returns:
         Path where the file was saved
     """
     os.makedirs(save_dir, exist_ok=True)
     save_path = get_client_bn_stats_path(save_dir, partition_id)
-    
+
     # Convert to CPU tensors before saving
-    cpu_stats = {k: v.cpu() if hasattr(v, 'cpu') else v for k, v in bn_stats.items()}
+    cpu_stats = {k: v.cpu() if hasattr(v, "cpu") else v for k, v in bn_stats.items()}
     torch.save(cpu_stats, save_path)
-    
+
     return save_path
 
 
@@ -299,19 +300,19 @@ def load_client_bn_stats(
 ) -> Dict[str, torch.Tensor] | None:
     """
     Load client BN statistics from disk for resume training.
-    
+
     Args:
         save_dir: Directory where client BN stats are saved
         partition_id: Client partition ID
-        
+
     Returns:
         Dictionary of BN statistics if file exists, None otherwise
     """
     load_path = get_client_bn_stats_path(save_dir, partition_id)
-    
+
     if not os.path.exists(load_path):
         return None
-    
+
     try:
         bn_stats = torch.load(load_path, map_location="cpu")
         return bn_stats
@@ -323,12 +324,116 @@ def load_client_bn_stats(
 def client_bn_stats_exist(save_dir: str, partition_id: int) -> bool:
     """
     Check if saved BN statistics exist for a client.
-    
+
     Args:
         save_dir: Directory where client BN stats are saved
         partition_id: Client partition ID
-        
+
     Returns:
         True if the file exists, False otherwise
     """
     return os.path.exists(get_client_bn_stats_path(save_dir, partition_id))
+
+
+# =============================================================================
+# ANALYSIS UTILITIES FOR TRACKING BN STATS OVER TIME
+# Save BN statistics with round and client ID for analysis purposes
+# =============================================================================
+
+
+def tensor_to_serializable(value) -> float | list:
+    """
+    Convert a torch tensor to a JSON-serializable value.
+
+    Args:
+        value: Tensor or scalar value
+
+    Returns:
+        Float or list representation suitable for JSON serialization
+    """
+    if isinstance(value, torch.Tensor):
+        if value.numel() == 1:
+            # Scalar tensor
+            return float(value.item())
+        else:
+            # Multi-element tensor - convert to list
+            return value.cpu().flatten().tolist()
+    elif isinstance(value, (int, float)):
+        return float(value)
+    else:
+        return float(value)
+
+
+def save_client_bn_stats_to_history(
+    bn_stats: Dict[str, torch.Tensor],
+    history_file: str,
+    partition_id: int,
+    server_round: int,
+) -> str:
+    """
+    Save client BN statistics to a JSON history file for analysis.
+
+    This tracks how BN statistics evolve across rounds for each client.
+    Useful for analyzing client-specific BN stat changes and for later
+    FedAvg aggregation without re-running simulations.
+
+    File structure:
+    {
+        "round_1": {
+            "client_0": {...bn_stats...},
+            "client_1": {...bn_stats...},
+            ...
+        },
+        "round_2": {
+            "client_0": {...bn_stats...},
+            ...
+        }
+    }
+
+    Args:
+        bn_stats: Dictionary of BN statistics (running_mean, running_var, etc.)
+        history_file: Path to the JSON history file
+        partition_id: Client partition ID
+        server_round: Current server round number
+
+    Returns:
+        Path where the file was saved
+    """
+    # Ensure directory exists
+    os.makedirs(os.path.dirname(history_file), exist_ok=True)
+
+    # Load existing history or create new one
+    if os.path.exists(history_file):
+        try:
+            with open(history_file, "r") as f:
+                history = json.load(f)
+        except Exception as e:
+            print(
+                f"[SiloBN History] Warning: Failed to load history from {history_file}: {e}"
+            )
+            history = {}
+    else:
+        history = {}
+
+    # Create round key if it doesn't exist
+    round_key = f"round_{server_round}"
+    if round_key not in history:
+        history[round_key] = {}
+
+    # Convert BN stats to serializable format
+    client_stats_serializable = {}
+    for param_name, param_value in bn_stats.items():
+        client_stats_serializable[param_name] = tensor_to_serializable(param_value)
+
+    # Save for this client
+    history[round_key][f"client_{partition_id}"] = client_stats_serializable
+
+    # Write back to file
+    try:
+        with open(history_file, "w") as f:
+            json.dump(history, f, indent=2)
+    except Exception as e:
+        print(f"[SiloBN History] Error: Failed to save history to {history_file}: {e}")
+        raise
+
+    return history_file
