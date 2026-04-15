@@ -6,10 +6,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.model_zoo as modelzoo
 
+from .norm import make_group_norm
+
 resnet18_url = 'https://download.pytorch.org/models/resnet18-5c106cde.pth'
-
-
-from torch.nn import BatchNorm2d
 
 
 def conv3x3(in_planes, out_planes, stride=1):
@@ -22,17 +21,17 @@ class BasicBlock(nn.Module):
     def __init__(self, in_chan, out_chan, stride=1):
         super(BasicBlock, self).__init__()
         self.conv1 = conv3x3(in_chan, out_chan, stride)
-        self.bn1 = BatchNorm2d(out_chan)
+        self.bn1 = make_group_norm(out_chan)
         self.conv2 = conv3x3(out_chan, out_chan)
-        self.bn2 = BatchNorm2d(out_chan)
+        self.bn2 = make_group_norm(out_chan)
         self.relu = nn.ReLU(inplace=True)
         self.downsample = None
         if in_chan != out_chan or stride != 1:
             self.downsample = nn.Sequential(
                 nn.Conv2d(in_chan, out_chan,
                           kernel_size=1, stride=stride, bias=False),
-                BatchNorm2d(out_chan),
-                )
+                make_group_norm(out_chan),
+            )
 
     def forward(self, x):
         residual = self.conv1(x)
@@ -62,7 +61,7 @@ class Resnet18(nn.Module):
         super(Resnet18, self).__init__()
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
                                bias=False)
-        self.bn1 = BatchNorm2d(64)
+        self.bn1 = make_group_norm(64)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         self.layer1 = create_layer_basic(64, 64, bnum=2, stride=1)
@@ -78,17 +77,19 @@ class Resnet18(nn.Module):
         x = self.maxpool(x)
 
         x = self.layer1(x)
-        feat8 = self.layer2(x) # 1/8
-        feat16 = self.layer3(feat8) # 1/16
-        feat32 = self.layer4(feat16) # 1/32
+        feat8 = self.layer2(x)  # 1/8
+        feat16 = self.layer3(feat8)  # 1/16
+        feat32 = self.layer4(feat16)  # 1/32
         return feat8, feat16, feat32
 
     def init_weight(self):
         state_dict = modelzoo.load_url(resnet18_url)
         self_state_dict = self.state_dict()
         for k, v in state_dict.items():
-            if 'fc' in k: continue
-            self_state_dict.update({k: v})
+            if 'fc' in k:
+                continue
+            if k in self_state_dict and self_state_dict[k].shape == v.shape:
+                self_state_dict.update({k: v})
         self.load_state_dict(self_state_dict)
 
     def get_params(self):
@@ -98,7 +99,7 @@ class Resnet18(nn.Module):
                 wd_params.append(module.weight)
                 if not module.bias is None:
                     nowd_params.append(module.bias)
-            elif isinstance(module, nn.modules.batchnorm._BatchNorm):
+            elif isinstance(module, nn.GroupNorm):
                 nowd_params += list(module.parameters())
         return wd_params, nowd_params
 

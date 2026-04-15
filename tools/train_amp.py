@@ -1,37 +1,35 @@
 #!/usr/bin/python
 # -*- encoding: utf-8 -*-
 
+from lib.logger import setup_logger, log_msg
+from lib.meters import TimeMeter, AvgMeter
+from lib.lr_scheduler import WarmupPolyLrScheduler
+from lib.ohem_ce_loss import OhemCELoss
+from evaluate import eval_model, Metrics, SizePreprocessor
+from lib.data import get_data_loader
+from configs import set_cfg_from_file
+from lib.models import model_factory
+import torch.cuda.amp as amp
+from torch.utils.data import DataLoader
+import torch.distributed as dist
+import torch.nn.functional as F
+import torch.nn as nn
+import torch
+from tabulate import tabulate
+import numpy as np
+import argparse
+import json
+import time
+import logging
+import random
+import os.path as osp
+import os
 import sys
 
 sys.path.insert(0, ".")
-import os
-import os.path as osp
-import random
-import logging
-import time
-import json
-import argparse
-import numpy as np
-from tabulate import tabulate
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.distributed as dist
-from torch.utils.data import DataLoader
-import torch.cuda.amp as amp
-
-from lib.models import model_factory
-from configs import set_cfg_from_file
-from lib.data import get_data_loader
-from evaluate import eval_model, Metrics, SizePreprocessor
-from lib.ohem_ce_loss import OhemCELoss
-from lib.lr_scheduler import WarmupPolyLrScheduler
-from lib.meters import TimeMeter, AvgMeter
-from lib.logger import setup_logger, log_msg
 
 
-## fix all random seeds
+# fix all random seeds
 #  torch.manual_seed(123)
 #  torch.cuda.manual_seed(123)
 #  np.random.seed(123)
@@ -190,11 +188,13 @@ def set_model(lb_ignore=255):
         logger.info("\tmissing keys: " + json.dumps(msg.missing_keys))
         logger.info("\tunexpected keys: " + json.dumps(msg.unexpected_keys))
     if cfg.use_sync_bn:
-        net = nn.SyncBatchNorm.convert_sync_batchnorm(net)
+        logger.info(
+            "cfg.use_sync_bn is ignored because the model uses GroupNorm")
     net.cuda()
     net.train()
     criteria_pre = OhemCELoss(0.7, lb_ignore)
-    criteria_aux = [OhemCELoss(0.7, lb_ignore) for _ in range(cfg.num_aux_heads)]
+    criteria_aux = [OhemCELoss(0.7, lb_ignore)
+                    for _ in range(cfg.num_aux_heads)]
     return net, criteria_pre, criteria_aux
 
 
@@ -265,26 +265,26 @@ def set_meters():
 def train():
     logger = logging.getLogger()
 
-    ## dataset
+    # dataset
     dl_train = get_data_loader(cfg, mode="train")
     dl_val = get_data_loader(cfg, mode="val")
 
-    ## model
+    # model
     net, criteria_pre, criteria_aux = set_model(dl_train.dataset.lb_ignore)
 
-    ## optimizer
+    # optimizer
     optim = set_optimizer(net)
 
-    ## mixed precision training
+    # mixed precision training
     scaler = amp.GradScaler()
 
-    ## ddp training
+    # ddp training
     net = set_model_dist(net)
 
-    ## meters
+    # meters
     time_meter, loss_meter, loss_pre_meter, loss_aux_meters = set_meters()
 
-    ## lr scheduler
+    # lr scheduler
     lr_schdr = WarmupPolyLrScheduler(
         optim,
         power=0.9,
@@ -295,7 +295,7 @@ def train():
         last_epoch=-1,
     )
 
-    ## Resume from checkpoint if specified
+    # Resume from checkpoint if specified
     start_it = 0
     best_miou = 0.0
     latest_metrics = {
@@ -310,7 +310,7 @@ def train():
             net, optim, lr_schdr, args.resume_from
         )
 
-    ## training loop
+    # training loop
     for it, (im, lb) in enumerate(dl_train, start=start_it):
         im = im.cuda()
         lb = lb.cuda()
@@ -320,7 +320,8 @@ def train():
         with amp.autocast(enabled=cfg.use_fp16):
             logits, *logits_aux = net(im)
             loss_pre = criteria_pre(logits, lb)
-            loss_aux = [crit(lgt, lb) for crit, lgt in zip(criteria_aux, logits_aux)]
+            loss_aux = [crit(lgt, lb)
+                        for crit, lgt in zip(criteria_aux, logits_aux)]
             loss = loss_pre + sum(loss_aux)
 
         scaler.scale(loss).backward()
@@ -331,9 +332,10 @@ def train():
         time_meter.update()
         loss_meter.update(loss.item())
         loss_pre_meter.update(loss_pre.item())
-        _ = [mter.update(lss.item()) for mter, lss in zip(loss_aux_meters, loss_aux)]
+        _ = [mter.update(lss.item())
+             for mter, lss in zip(loss_aux_meters, loss_aux)]
 
-        ## print training log message
+        # print training log message
         if (it + 1) % 100 == 0:
             lr = lr_schdr.get_lr()
             lr = sum(lr) / len(lr)
@@ -348,7 +350,7 @@ def train():
             )
             logger.info(msg)
 
-        ## evaluation during training
+        # evaluation during training
         if (it + 1) % args.eval_interval == 0:
             logger.info(f"\n--- Evaluation at iteration {it + 1} ---")
             torch.cuda.empty_cache()
@@ -398,7 +400,7 @@ def train():
         if it >= cfg.max_iter:
             break
 
-    ## dump the final model and evaluate the result
+    # dump the final model and evaluate the result
     save_pth = osp.join(cfg.respth, "model_final.pth")
     logger.info("\nsave models to {}".format(save_pth))
     state = net.module.state_dict()
@@ -409,9 +411,11 @@ def train():
     torch.cuda.empty_cache()
     iou_heads, iou_content, f1_heads, f1_content = eval_model(cfg, net.module)
     logger.info("\neval results of f1 score metric:")
-    logger.info("\n" + tabulate(f1_content, headers=f1_heads, tablefmt="orgtbl"))
+    logger.info("\n" + tabulate(f1_content,
+                headers=f1_heads, tablefmt="orgtbl"))
     logger.info("\neval results of miou metric:")
-    logger.info("\n" + tabulate(iou_content, headers=iou_heads, tablefmt="orgtbl"))
+    logger.info("\n" + tabulate(iou_content,
+                headers=iou_heads, tablefmt="orgtbl"))
 
     return
 

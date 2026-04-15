@@ -125,28 +125,20 @@ class CustomFedAvgM(CustomFedAvg):
             old = old_params[key]
             agg = agg_params[key]
 
-            # BatchNorm buffers -> use aggregated values directly (no momentum)
-            if (
-                "running_mean" in key
-                or "running_var" in key
-                or "num_batches_tracked" in key
-            ):
-                new = agg
-            else:
-                # Compute delta: update direction
-                delta = agg - old
+            # Compute delta: update direction
+            delta = agg - old
 
-                # Update momentum buffer: v = beta * v + delta
-                self.momentum_buffer[key] = beta * \
-                    self.momentum_buffer[key] + delta
+            # Update momentum buffer: v = beta * v + delta
+            self.momentum_buffer[key] = beta * \
+                self.momentum_buffer[key] + delta
 
-                # Apply update: w_new = w_old + server_lr * v
-                new = old + server_lr * self.momentum_buffer[key]
+            # Apply update: w_new = w_old + server_lr * v
+            new = old + server_lr * self.momentum_buffer[key]
 
-                abs_new = np.abs(new)
-                max_abs_weight = max(max_abs_weight, abs_new.max())
-                mean_abs_weight_acc.append(abs_new.mean())
-                num_tracked += 1
+            abs_new = np.abs(new)
+            max_abs_weight = max(max_abs_weight, abs_new.max())
+            mean_abs_weight_acc.append(abs_new.mean())
+            num_tracked += 1
 
             new_params[key] = new
 

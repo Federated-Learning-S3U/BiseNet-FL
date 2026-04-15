@@ -116,21 +116,13 @@ class CustomFedEMA(CustomFedAvg):
             old = old_params[key]
             agg = agg_params[key]
 
-            # BatchNorm buffers -> use aggregated values directly
-            if (
-                "running_mean" in key
-                or "running_var" in key
-                or "num_batches_tracked" in key
-            ):
-                new = agg
-            else:
-                # EMA for trainable parameters
-                new = beta * old + (1.0 - beta) * agg
+            # EMA for trainable parameters
+            new = beta * old + (1.0 - beta) * agg
 
-                abs_new = np.abs(new)
-                max_abs_weight = max(max_abs_weight, abs_new.max())
-                mean_abs_weight_acc.append(abs_new.mean())
-                num_tracked += 1
+            abs_new = np.abs(new)
+            max_abs_weight = max(max_abs_weight, abs_new.max())
+            mean_abs_weight_acc.append(abs_new.mean())
+            num_tracked += 1
 
             new_params[key] = new
 
