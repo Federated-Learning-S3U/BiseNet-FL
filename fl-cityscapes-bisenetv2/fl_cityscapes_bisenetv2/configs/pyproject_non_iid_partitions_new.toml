@@ -32,7 +32,7 @@ clientapp = "fl_cityscapes_bisenetv2.client_app:app"
 
 # Server-side FL configs
 server-device = "cuda"
-strategy-name = "FedAvg" # Options: FedAvg, FedAvgM, FedProx, FedEMA
+strategy-name = "FedAvg" # Options: FedAvg, FedAvgM, FedProx, FedEMA, FedSiloBN
 num-server-rounds = 30
 fraction-train = 0.5
 fraction-evaluate = 0.0
@@ -70,6 +70,11 @@ client-selection-log = "/kaggle/working/res/client_selection_log.json"
 best-miou = 0.0 # IMPORTANT UPDATE ON RESUME
 best-metric = "/kaggle/working/res/best_metric.json"
 latest-metric = "/kaggle/working/res/latest_metric.json"
+
+# Client-side BN Stats saved for each round for clients models merge
+client-bn-stats-dir = "/kaggle/working/res/client_bn_stats"
+# Client-side BN Stats Analysis Configs (for FedSiloBN analysis)
+client-bn-stats-history = "/kaggle/working/res/client_bn_stats_history.json"
 
 # Client-side FL Configs
 client-device = "cuda"
