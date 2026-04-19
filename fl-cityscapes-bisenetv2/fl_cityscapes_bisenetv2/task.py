@@ -1,26 +1,27 @@
 """fl-cityscapes-bisenetv2: A Flower / PyTorch app."""
 
 import json
-import numpy as np
-import copy
 
 import torch
-import torch.amp as amp
 
 from flwr.app import ArrayRecord, MetricRecord, Context
 
-
-from lib.models import BiSeNetV2
-from lib.ohem_ce_loss import OhemCELoss
-from tools.eval_metrics import compute_metrics_from_cm
-
+from fl_cityscapes_bisenetv2.models.model_utils import get_model
 from fl_cityscapes_bisenetv2.data_preparation.datasets import load_server_eval_data
-from fl_cityscapes_bisenetv2.utils.model_utils import set_optimizer
-from fl_cityscapes_bisenetv2.data_preparation.utils import aggregate_client_metrics
+
+from fl_cityscapes_bisenetv2.models.bisenetv2_train import (
+    train_bisenetv2,
+    test_bisenetv2,
+)
+from fl_cityscapes_bisenetv2.models.deeplabv3p_train import (
+    train_deeplabv3p,
+    test_deeplabv3p,
+)
 
 
 def train(
     net,
+    model_name,
     trainloader,
     epochs,
     lr,
@@ -32,113 +33,33 @@ def train(
     neg_entropy_weight: float = 0.0,
 ):
     """Train the model on the training set."""
-    global_weights = None
-    if strategy == "FedProx":
-        global_params = copy.deepcopy(net)
-        global_weights = list(global_params.parameters())
+    train_fn = train_bisenetv2 if model_name == "BiSeNetV2" else train_deeplabv3p
 
-    net.to(device)
-    criterion_pre = OhemCELoss(0.7, device=device)
-    criterion_aux = [OhemCELoss(0.7, device=device) for _ in range(num_aux_heads)]
-
-    optimizer = set_optimizer(net, lr_start=lr, weight_decay=wd)
-
-    scaler = amp.GradScaler()
-
-    net.train()
-    running_loss = 0.0
-    train_loss_pre = 0.0
-    for _ in range(epochs):
-        for im, lb in trainloader:
-            images = im.to(device)
-            labels = lb.to(device)
-
-            optimizer.zero_grad()
-
-            with amp.autocast(device_type="cuda", enabled=False):
-                logits, *logits_aux = net(images)
-
-                loss_pre = criterion_pre(logits, labels)
-                loss_aux = [
-                    crit(lgt, labels) for crit, lgt in zip(criterion_aux, logits_aux)
-                ]
-                loss = loss_pre + sum(loss_aux)
-
-                # FedProx: add proximal term to the loss
-                if strategy == "FedProx" and prox_mu > 0.0:
-                    proximal_term = 0.0
-                    local_weights = list(net.parameters())
-                    for w, w_t in zip(local_weights, global_weights):
-                        proximal_term += (w - w_t).norm(2)
-                    loss += (prox_mu / 2) * proximal_term
-
-                # Negative-entropy regularization (encourages confident predictions)
-                if strategy == "FedEMA" and neg_entropy_weight > 0.0:
-                    probs = torch.softmax(logits, dim=1)
-                    log_probs = torch.log_softmax(logits, dim=1)
-                    # Average negative entropy over batch and pixels
-                    neg_entropy = (probs * log_probs).sum(dim=1).mean()
-                    loss = loss + neg_entropy_weight * neg_entropy
-
-            scaler.scale(loss).backward()
-
-            scaler.step(optimizer)
-            scaler.update()
-
-            running_loss += loss.item()
-            train_loss_pre += loss_pre.item()
-
-    avg_trainloss = running_loss / (len(trainloader) * epochs)
-    train_loss_pre = train_loss_pre / (len(trainloader) * epochs)
-
-    return avg_trainloss, train_loss_pre
+    return train_fn(
+        net=net,
+        trainloader=trainloader,
+        epochs=epochs,
+        lr=lr,
+        wd=wd,
+        device=device,
+        strategy=strategy,
+        prox_mu=prox_mu,
+        neg_entropy_weight=neg_entropy_weight,
+        num_aux_heads=num_aux_heads,
+    )
 
 
-def test(net, testloader, device, num_classes, lb_ignore=255):
+def test(net, model_name, testloader, device, num_classes, lb_ignore=255):
     """Validate the model on the test set."""
+    test_fn = test_bisenetv2 if model_name == "BiSeNetV2" else test_deeplabv3p
 
-    net.to(device)
-    org_aux = net.aux_mode
-    net.aux_mode = "eval"
-    net.eval()
-
-    criterion_pre = OhemCELoss(0.7, device=device)
-
-    conf_matrix = np.zeros((num_classes, num_classes), dtype=np.int64)
-    total_loss = 0.0
-
-    with torch.no_grad():
-        for im, lb in testloader:
-            images = im.to(device)
-            labels = lb.to(device)
-
-            logits = net(images)[0]
-            loss = criterion_pre(logits, labels)
-            total_loss += loss.item()
-
-            preds = torch.softmax(logits, dim=1).argmax(dim=1)
-
-            preds_np = preds.cpu().numpy().reshape(-1)
-            labels_np = labels.cpu().numpy().reshape(-1)
-
-            mask = labels_np != lb_ignore
-            preds_np = preds_np[mask]
-            labels_np = labels_np[mask]
-
-            conf_matrix += np.bincount(
-                labels_np * num_classes + preds_np,
-                minlength=num_classes**2,
-            ).reshape(num_classes, num_classes)
-
-    print("Finished evaluation on test set.")
-
-    final_loss = total_loss / len(testloader)
-
-    metrics = compute_metrics_from_cm(conf_matrix)
-
-    net.aux_mode = org_aux
-
-    return {**metrics, "val_loss": final_loss}
+    return test_fn(
+        net=net,
+        testloader=testloader,
+        device=device,
+        num_classes=num_classes,
+        lb_ignore=lb_ignore,
+    )
 
 
 def make_central_evaluate(context: Context):
@@ -152,12 +73,12 @@ def make_central_evaluate(context: Context):
     save_best = context.run_config["save-best"]
     best_metric_file = context.run_config["best-metric"]
     latest_metric_file = context.run_config["latest-metric"]
-    client_data_partition = context.run_config["client-data-partition"]
 
     def central_evaluate(server_round: int, arrays: ArrayRecord) -> MetricRecord:
         """Evaluate the global model on the server side (optional)."""
 
         # Read run config
+        model_name: str = context.run_config["model-name"]
         server_device: str = context.run_config["server-device"]
 
         eval_batch_size: int = context.run_config["eval-batch-size"]
@@ -177,7 +98,7 @@ def make_central_evaluate(context: Context):
         device = torch.device(server_device)
 
         # Load Global Model
-        model = BiSeNetV2(num_classes).cpu()
+        model = get_model(num_classes, model_name).cpu()
         sd = arrays.to_torch_state_dict()
         model.load_state_dict(sd, strict=True)
 
@@ -193,7 +114,9 @@ def make_central_evaluate(context: Context):
         # Evaluate the model on the test set
         try:
             model.to(device)
-            metrics = test(model, eval_loader, device, num_classes, lb_ignore)
+            metrics = test(
+                model, model_name, eval_loader, device, num_classes, lb_ignore
+            )
 
         finally:
             try:

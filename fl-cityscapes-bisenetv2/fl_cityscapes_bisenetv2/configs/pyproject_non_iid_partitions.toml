@@ -32,6 +32,7 @@ clientapp = "fl_cityscapes_bisenetv2.client_app:app"
 
 # Server-side FL configs
 server-device = "cuda"
+model-name = "BiSeNetV2" # Options: BiSeNetV2, DeepLabV3PlusLarge, DeepLabV3PlusSmall
 strategy-name = "FedAvg" # Options: FedAvg, FedAvgM, FedProx, FedEMA
 num-server-rounds = 20
 fraction-train = 0.5
@@ -90,14 +91,14 @@ lr-schedule-file = "/kaggle/working/res/lr_schedule.json"
 # Model Configs
 num-classes = 19
 lb-ignore = 255
-num-aux-heads = 4
 
-# Optimizer Configs
+## Optimizer Configs
 weight-decay = 5e-4
-
-# Data Augmentation Configs
+## Data Augmentation Configs
 scales = "[0.25, 2.0]"
 cropsize = "[512, 1024]"
+## BiSeNetV2 Specific Configs
+num-aux-heads = 4
 
 # Default federation to use when running the app
 [tool.flwr.federations]

@@ -4,7 +4,7 @@ import torch
 from flwr.app import ArrayRecord, ConfigRecord, Context
 from flwr.serverapp import Grid, ServerApp
 
-from lib.models import BiSeNetV2
+from fl_cityscapes_bisenetv2.models.model_utils import get_model
 
 from fl_cityscapes_bisenetv2.task import make_central_evaluate
 from fl_cityscapes_bisenetv2.strategies import (
@@ -23,6 +23,8 @@ def main(grid: Grid, context: Context) -> None:
     """Main entry point for the ServerApp."""
 
     # Read run config
+    model_name: str = context.run_config["model-name"]
+
     num_rounds: int = context.run_config["num-server-rounds"]
     fraction_train: float = context.run_config["fraction-train"]
 
@@ -54,7 +56,7 @@ def main(grid: Grid, context: Context) -> None:
         strategy_params["neg_entropy_weight"] = context.run_config["neg-entropy-weight"]
 
     # Load global model
-    global_model = BiSeNetV2(num_classes)
+    global_model = get_model(num_classes, model_name)
 
     # Load pretrained model if resuming
     if resume:

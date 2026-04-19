@@ -26,8 +26,9 @@ clientapp = "fl_cityscapes_bisenetv2.client_app:app"
 
 # Server-side FL configs
 server-device = "cuda"
+model-name = "DeepLabV3PlusSmall" # Options: BiSeNetV2, DeepLabV3PlusLarge, DeepLabV3PlusSmall
 strategy-name = "FedAvg" # Options: FedAvg, FedAvgM, FedProx, FedEMA
-num-server-rounds = 4
+num-server-rounds = 2
 fraction-train = 0.4
 fraction-evaluate = 0.0
 
@@ -70,7 +71,7 @@ client-device = "cuda"
 
 # Client Dataset Paths
 im-root = "./datasets/cityscapes"
-client-data-partition = "./datasets/cityscapes/city_partitions.json"
+client-data-partition = "./datasets/cityscapes/iid_partition_new.json"
 
 # Model Training Hyper-Params
 local-epochs = 3
@@ -84,14 +85,14 @@ lr-schedule-file = "./res/lr_schedule.json"
 # Model Configs
 num-classes = 19
 lb-ignore = 255
-num-aux-heads = 4
 
-# Optimizer Configs
+## Optimizer Configs
 weight-decay = 5e-4
-
-# Data Augmentation Configs
+## Data Augmentation Configs
 scales = "[0.25, 2.0]"
 cropsize = "[512, 1024]"
+## BiSeNetV2 Specific Configs
+num-aux-heads = 4
 
 # Default federation to use when running the app
 [tool.flwr.federations]
@@ -101,6 +102,6 @@ default = "local-simulation-single-gpu"
 [tool.flwr.federations.local-simulation-single-gpu]
 options.backend.init_args.num_cpus = 2 # Number of CPUs for the simulation controller 
 options.backend.init_args.num_gpus = 1 # Number of GPUs for the simulation controller
-options.num-supernodes = 18 # Number of SuperNodes (i.e., Clients) in the Data Setup
+options.num-supernodes = 10 # Number of SuperNodes (i.e., Clients) in the Data Setup
 options.backend.client-resources.num-cpus = 2 # Number of CPUs per Client
 options.backend.client-resources.num-gpus = 1.0 # Fractional GPU allocation per Client

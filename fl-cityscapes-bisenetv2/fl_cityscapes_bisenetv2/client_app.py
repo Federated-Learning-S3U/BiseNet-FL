@@ -7,11 +7,11 @@ import torch
 from flwr.app import ArrayRecord, Context, Message, MetricRecord, RecordDict
 from flwr.clientapp import ClientApp
 
+from fl_cityscapes_bisenetv2.models.model_utils import get_model
 from fl_cityscapes_bisenetv2.data_preparation.datasets import load_client_train_data
 from fl_cityscapes_bisenetv2.task import train as train_fn
 from fl_cityscapes_bisenetv2.utils.clients_logging import log_client_partition
 
-from lib.models import BiSeNetV2
 
 # Flower ClientApp
 app = ClientApp()
@@ -22,6 +22,8 @@ def train(msg: Message, context: Context):
     """Train the model on local data."""
 
     # Read run config
+    model_name: str = context.run_config["model-name"]
+
     local_epochs: int = context.run_config["local-epochs"]
     batch_size: int = context.run_config["batch-size"]
 
@@ -41,12 +43,12 @@ def train(msg: Message, context: Context):
     # Get partition ID and server round
     partition_id = context.node_config["partition-id"]
     server_round = msg.content["config"]["server-round"]
-    
+
     # Log client participation
     log_client_partition(client_selection_log_file, server_round, partition_id)
 
     # Load the model and initialize it with the received weights
-    model = BiSeNetV2(num_classes)
+    model = get_model(num_classes, model_name)
     model.load_state_dict(msg.content["arrays"].to_torch_state_dict())
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
@@ -59,9 +61,12 @@ def train(msg: Message, context: Context):
     # Call the training function
     prox_mu = msg.content["config"].get("proximal-mu", 0.0)
     neg_entropy_weight = msg.content["config"].get("neg-entropy-weight", 0.0)
+
     print(f"[Client {partition_id}] Starting training.")
+
     train_loss, train_loss_pre = train_fn(
         net=model,
+        model_name=model_name,
         trainloader=trainloader,
         epochs=local_epochs,
         lr=msg.content["config"]["lr"],
