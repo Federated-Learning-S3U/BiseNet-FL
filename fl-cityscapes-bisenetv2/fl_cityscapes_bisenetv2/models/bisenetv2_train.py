@@ -9,39 +9,62 @@ from lib.ohem_ce_loss import OhemCELoss
 from tools.eval_metrics import compute_metrics_from_cm
 
 
-def set_optimizer(model, lr_start, weight_decay):
-    """Optimizer with parameter groups for different learning rates and weight decay."""
+def set_optimizer_bisenet(model, lr_start, weight_decay, is_pretrained=True):
+    """
+    Optimizer tailored for BiSeNet models.
+    If pretrained: Uses 10x LR for segmentation/aux heads.
+    If from scratch: Uses uniform LR across the whole model.
+    Always disables weight decay for 1D params (biases/BatchNorms).
+    """
     if hasattr(model, "get_params"):
+        # BiSeNet's get_params() splits by weight-decay (1D vs 4D) AND by layer location (backbone vs heads)
         wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = (
             model.get_params()
         )
-        #  wd_val = cfg.weight_decay
-        wd_val = 0
-        params_list = [
-            {
-                "params": wd_params,
-            },
-            {"params": nowd_params, "weight_decay": wd_val},
-            {"params": lr_mul_wd_params, "lr": lr_start * 10},
-            {
-                "params": lr_mul_nowd_params,
-                "weight_decay": wd_val,
-                "lr": lr_start * 10,
-            },
-        ]
+
+        if is_pretrained:
+            # Scenario 1: Fine-tuning (10x LR for Heads/Aux)
+            params_list = [
+                {"params": wd_params, "lr": lr_start, "weight_decay": weight_decay},
+                {"params": nowd_params, "lr": lr_start, "weight_decay": 0.0},
+                {
+                    "params": lr_mul_wd_params,
+                    "lr": lr_start * 10,
+                    "weight_decay": weight_decay,
+                },
+                {
+                    "params": lr_mul_nowd_params,
+                    "lr": lr_start * 10,
+                    "weight_decay": 0.0,
+                },
+            ]
+        else:
+            # Scenario 2: Training from scratch (Uniform LR)
+            # Combine the backbone and head parameters, keeping weight-decay separated
+            all_wd_params = wd_params + lr_mul_wd_params
+            all_nowd_params = nowd_params + lr_mul_nowd_params
+
+            params_list = [
+                {"params": all_wd_params, "lr": lr_start, "weight_decay": weight_decay},
+                {"params": all_nowd_params, "lr": lr_start, "weight_decay": 0.0},
+            ]
+
     else:
+        # Fallback for models without get_params()
         wd_params, non_wd_params = [], []
         for name, param in model.named_parameters():
+            if not param.requires_grad:
+                continue
             if param.dim() == 1:
                 non_wd_params.append(param)
-            elif param.dim() == 2 or param.dim() == 4:
+            else:
                 wd_params.append(param)
+
         params_list = [
-            {
-                "params": wd_params,
-            },
-            {"params": non_wd_params, "weight_decay": 0},
+            {"params": wd_params, "lr": lr_start, "weight_decay": weight_decay},
+            {"params": non_wd_params, "lr": lr_start, "weight_decay": 0.0},
         ]
+
     optim = torch.optim.SGD(
         params_list,
         lr=lr_start,
@@ -53,6 +76,7 @@ def set_optimizer(model, lr_start, weight_decay):
 
 def train_bisenetv2(
     net,
+    is_pretrained,
     trainloader,
     epochs,
     lr,
@@ -73,7 +97,9 @@ def train_bisenetv2(
     criterion_pre = OhemCELoss(0.7, device=device)
     criterion_aux = [OhemCELoss(0.7, device=device) for _ in range(num_aux_heads)]
 
-    optimizer = set_optimizer(net, lr_start=lr, weight_decay=wd)
+    optimizer = set_optimizer_bisenet(
+        net, lr_start=lr, weight_decay=wd, is_pretrained=is_pretrained
+    )
 
     net.train()
     running_loss = 0.0

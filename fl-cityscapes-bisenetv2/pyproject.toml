@@ -27,6 +27,8 @@ clientapp = "fl_cityscapes_bisenetv2.client_app:app"
 # Server-side FL configs
 server-device = "cuda"
 model-name = "DeepLabV3PlusSmall" # Options: BiSeNetV2, DeepLabV3PlusLarge, DeepLabV3PlusSmall
+is-pretrained = false # Whether to start training from a pretrained checkpoint (true/false)
+
 strategy-name = "FedAvg" # Options: FedAvg, FedAvgM, FedProx, FedEMA
 num-server-rounds = 2
 fraction-train = 0.4

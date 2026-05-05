@@ -9,15 +9,19 @@ from tools.eval_metrics import compute_metrics_from_cm
 import torch
 
 
-def set_optimizer_smp(model, lr_start, weight_decay):
+import torch
+
+
+def set_optimizer_smp(model, lr_start, weight_decay, is_pretrained):
     """
-    Optimizer with parameter groups tailored for SMP models.
-    Applies base LR to the pre-trained encoder (MobileNetV3) and 10x LR
-    to the newly initialized decoder/head. Disables weight decay for 1D params (biases/BatchNorms).
+    Optimizer tailored for SMP models.
+    If pretrained: Uses 10x LR for decoder/head.
+    If from scratch: Uses uniform LR across the whole model.
+    Always disables weight decay for 1D params (biases/BatchNorms).
     """
 
     def get_params_by_dim(module):
-        """Helper to separate weights (requires weight decay) from biases/BNs (no weight decay)."""
+        """Helper to separate weights (requires weight decay) from biases/BNs."""
         wd_params, non_wd_params = [], []
         for name, param in module.named_parameters():
             if not param.requires_grad:
@@ -30,32 +34,39 @@ def set_optimizer_smp(model, lr_start, weight_decay):
                 wd_params.append(param)
         return wd_params, non_wd_params
 
-    # 1. Grab parameters for the Encoder (MobileNetV3 Backbone)
-    encoder_wd, encoder_nowd = get_params_by_dim(model.encoder)
+    # Scenario 1: Training from Scratch (Uniform Learning Rate)
+    if not is_pretrained:
+        wd_params, non_wd_params = get_params_by_dim(model)
 
-    # 2. Grab parameters for the Decoder (ASPP) and Segmentation Head
-    # We group these together since they both need the 10x learning rate multiplier
-    decoder_wd, decoder_nowd = get_params_by_dim(model.decoder)
-    head_wd, head_nowd = get_params_by_dim(model.segmentation_head)
+        params_list = [
+            {"params": wd_params, "lr": lr_start, "weight_decay": weight_decay},
+            {"params": non_wd_params, "lr": lr_start, "weight_decay": 0.0},
+        ]
 
-    dec_head_wd = decoder_wd + head_wd
-    dec_head_nowd = decoder_nowd + head_nowd
+    # Scenario 2: Fine-Tuning a Pretrained Model (Differential Learning Rate)
+    else:
+        encoder_wd, encoder_nowd = get_params_by_dim(model.encoder)
+        decoder_wd, decoder_nowd = get_params_by_dim(model.decoder)
+        head_wd, head_nowd = get_params_by_dim(model.segmentation_head)
 
-    # 3. Construct the parameter list with differential learning rates
-    params_list = [
-        # Encoder: Base Learning Rate
-        {"params": encoder_wd, "lr": lr_start, "weight_decay": weight_decay},
-        {"params": encoder_nowd, "lr": lr_start, "weight_decay": 0.0},
-        # Decoder & Head: 10x Learning Rate
-        {"params": dec_head_wd, "lr": lr_start * 10, "weight_decay": weight_decay},
-        {"params": dec_head_nowd, "lr": lr_start * 10, "weight_decay": 0.0},
-    ]
+        dec_head_wd = decoder_wd + head_wd
+        dec_head_nowd = decoder_nowd + head_nowd
 
+        params_list = [
+            # Encoder: Base Learning Rate
+            {"params": encoder_wd, "lr": lr_start, "weight_decay": weight_decay},
+            {"params": encoder_nowd, "lr": lr_start, "weight_decay": 0.0},
+            # Decoder & Head: 10x Learning Rate
+            {"params": dec_head_wd, "lr": lr_start * 10, "weight_decay": weight_decay},
+            {"params": dec_head_nowd, "lr": lr_start * 10, "weight_decay": 0.0},
+        ]
+
+    # Initialize Optimizer
     optim = torch.optim.SGD(
         params_list,
         lr=lr_start,
         momentum=0.9,
-        weight_decay=weight_decay,  # This acts as a default, but is overridden by the dicts above
+        weight_decay=weight_decay,
     )
 
     return optim
@@ -63,6 +74,7 @@ def set_optimizer_smp(model, lr_start, weight_decay):
 
 def train_deeplabv3p(
     net,
+    is_pretrained,
     trainloader,
     epochs,
     lr,
@@ -83,7 +95,9 @@ def train_deeplabv3p(
 
     criterion = OhemCELoss(0.7, device=device)
 
-    optimizer = set_optimizer_smp(net, lr_start=lr, weight_decay=wd)
+    optimizer = set_optimizer_smp(
+        net, lr_start=lr, weight_decay=wd, is_pretrained=is_pretrained
+    )
 
     net.train()
 

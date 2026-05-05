@@ -12,7 +12,6 @@ from fl_cityscapes_bisenetv2.data_preparation.datasets import load_client_train_
 from fl_cityscapes_bisenetv2.task import train as train_fn
 from fl_cityscapes_bisenetv2.utils.clients_logging import log_client_partition
 
-
 # Flower ClientApp
 app = ClientApp()
 
@@ -23,6 +22,7 @@ def train(msg: Message, context: Context):
 
     # Read run config
     model_name: str = context.run_config["model-name"]
+    is_pretrained: bool = context.run_config["is-pretrained"]
 
     local_epochs: int = context.run_config["local-epochs"]
     batch_size: int = context.run_config["batch-size"]
@@ -48,7 +48,7 @@ def train(msg: Message, context: Context):
     log_client_partition(client_selection_log_file, server_round, partition_id)
 
     # Load the model and initialize it with the received weights
-    model = get_model(num_classes, model_name)
+    model = get_model(num_classes, model_name, is_pretrained)
     model.load_state_dict(msg.content["arrays"].to_torch_state_dict())
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
@@ -66,6 +66,7 @@ def train(msg: Message, context: Context):
 
     train_loss, train_loss_pre = train_fn(
         net=model,
+        is_pretrained=is_pretrained,
         model_name=model_name,
         trainloader=trainloader,
         epochs=local_epochs,

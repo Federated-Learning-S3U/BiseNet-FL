@@ -24,6 +24,7 @@ def main(grid: Grid, context: Context) -> None:
 
     # Read run config
     model_name: str = context.run_config["model-name"]
+    is_pretrained: bool = context.run_config["is-pretrained"]
 
     num_rounds: int = context.run_config["num-server-rounds"]
     fraction_train: float = context.run_config["fraction-train"]
@@ -56,18 +57,18 @@ def main(grid: Grid, context: Context) -> None:
         strategy_params["neg_entropy_weight"] = context.run_config["neg-entropy-weight"]
 
     # Load global model
-    global_model = get_model(num_classes, model_name)
+    global_model = get_model(num_classes, model_name, is_pretrained)
 
     # Load pretrained model if resuming
     if resume:
         print(f"[Server] Resuming from pretrained model at {pretrained_path}")
+        print(f"[Server] Pretrained model trained on {rounds_trained} rounds.")
+
         sd = torch.load(pretrained_path, map_location="cpu")
         global_model.load_state_dict(sd, strict=True)
-        print(f"[Server] Pretrained model trained on {rounds_trained} rounds.")
     # Else start from random initialized model
     else:
         print(f"[Server] Starting from random initialized model.")
-        print(f"[Server] Initial model trained on {rounds_trained} rounds.")
 
     arrays = ArrayRecord(global_model.state_dict())
 

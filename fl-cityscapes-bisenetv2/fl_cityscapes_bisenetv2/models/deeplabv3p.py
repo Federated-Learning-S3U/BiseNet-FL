@@ -1,7 +1,9 @@
 import segmentation_models_pytorch as smp
 
 
-def create_deeplabv3p(num_classes: int, encoder_variation: str) -> smp.DeepLabV3Plus:
+def create_deeplabv3p(
+    num_classes: int, encoder_variation: str, is_pretrained: bool
+) -> smp.DeepLabV3Plus:
     """Create a DeepLabV3+ model with a MobileNetV3 backbone."""
     if encoder_variation not in ["large", "small"]:
         raise ValueError(
@@ -13,7 +15,9 @@ def create_deeplabv3p(num_classes: int, encoder_variation: str) -> smp.DeepLabV3
         else "tu-mobilenetv3_small_100"
     )
     model = smp.DeepLabV3Plus(
-        encoder_name=encoder_name, encoder_weights="imagenet", classes=num_classes
+        encoder_name=encoder_name,
+        encoder_weights="imagenet" if is_pretrained else None,
+        classes=num_classes,
     )
 
     return model
@@ -23,5 +27,6 @@ if __name__ == "__main__":
     # Example usage
     num_classes = 19
     encoder_variation = "small"
-    model = create_deeplabv3p(num_classes, encoder_variation)
+    is_pretrained = False
+    model = create_deeplabv3p(num_classes, encoder_variation, is_pretrained)
     print(model)

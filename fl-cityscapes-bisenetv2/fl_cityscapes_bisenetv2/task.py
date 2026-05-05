@@ -21,6 +21,7 @@ from fl_cityscapes_bisenetv2.models.deeplabv3p_train import (
 
 def train(
     net,
+    is_pretrained,
     model_name,
     trainloader,
     epochs,
@@ -37,6 +38,7 @@ def train(
 
     return train_fn(
         net=net,
+        is_pretrained=is_pretrained,
         trainloader=trainloader,
         epochs=epochs,
         lr=lr,
