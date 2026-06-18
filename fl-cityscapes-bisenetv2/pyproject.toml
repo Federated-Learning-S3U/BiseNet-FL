@@ -29,6 +29,11 @@ server-device = "cuda"
 model-name = "DeepLabV3PlusSmall" # Options: BiSeNetV2, DeepLabV3PlusLarge, DeepLabV3PlusSmall
 is-pretrained = false # Whether to start training from a pretrained checkpoint (true/false)
 
+# Dataset selection
+# Options: cityscapes (19 classes), bdd100k (19 classes), iddav3 (26 classes)
+# Changing this also requires updating num-classes and client/server data paths below.
+dataset-name = "cityscapes"
+
 strategy-name = "FedAvg" # Options: FedAvg, FedAvgM, FedProx, FedEMA
 num-server-rounds = 2
 fraction-train = 0.4
@@ -85,7 +90,9 @@ lr-decay-rounds = 10
 lr-schedule-file = "./res/lr_schedule.json"
 
 # Model Configs
+# num-classes: cityscapes=19, bdd100k=19, iddav3=26
 num-classes = 19
+# lb-ignore: all supported datasets use 255
 lb-ignore = 255
 
 ## Optimizer Configs

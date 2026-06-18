@@ -33,7 +33,9 @@ def train(msg: Message, context: Context):
     client_data_partition: str = context.run_config["client-data-partition"]
     client_selection_log_file: str = context.run_config["client-selection-log"]
 
+    dataset_name: str = context.run_config["dataset-name"]
     num_classes: int = context.run_config["num-classes"]
+    lb_ignore: int = context.run_config["lb-ignore"]
 
     num_aux_heads: int = context.run_config["num-aux-heads"]
 
@@ -55,7 +57,8 @@ def train(msg: Message, context: Context):
 
     # Load the data
     trainloader = load_client_train_data(
-        im_root, client_data_partition, partition_id, batch_size, scales, cropsize
+        im_root, client_data_partition, partition_id, batch_size, scales, cropsize,
+        dataset_name=dataset_name,
     )
 
     # Call the training function
@@ -77,6 +80,7 @@ def train(msg: Message, context: Context):
         strategy=context.run_config["strategy-name"],
         prox_mu=prox_mu,
         neg_entropy_weight=neg_entropy_weight,
+        lb_ignore=lb_ignore,
     )
 
     model.cpu()

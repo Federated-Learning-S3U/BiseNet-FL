@@ -84,6 +84,7 @@ def train_deeplabv3p(
     prox_mu,
     neg_entropy_weight: float = 0.0,
     num_aux_heads: int = 0,
+    lb_ignore: int = 255,
 ):
     """Train the model on the training set."""
     global_weights = None
@@ -93,7 +94,7 @@ def train_deeplabv3p(
 
     net.to(device)
 
-    criterion = OhemCELoss(0.7, device=device)
+    criterion = OhemCELoss(0.7, device=device, lb_ignore=lb_ignore)
 
     optimizer = set_optimizer_smp(
         net, lr_start=lr, weight_decay=wd, is_pretrained=is_pretrained

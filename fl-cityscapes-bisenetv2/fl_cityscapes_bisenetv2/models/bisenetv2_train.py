@@ -86,6 +86,7 @@ def train_bisenetv2(
     prox_mu,
     neg_entropy_weight: float = 0.0,
     num_aux_heads=4,
+    lb_ignore: int = 255,
 ):
     """Train the model on the training set."""
     global_weights = None
@@ -94,8 +95,8 @@ def train_bisenetv2(
         global_weights = list(global_params.parameters())
 
     net.to(device)
-    criterion_pre = OhemCELoss(0.7, device=device)
-    criterion_aux = [OhemCELoss(0.7, device=device) for _ in range(num_aux_heads)]
+    criterion_pre = OhemCELoss(0.7, device=device, lb_ignore=lb_ignore)
+    criterion_aux = [OhemCELoss(0.7, device=device, lb_ignore=lb_ignore) for _ in range(num_aux_heads)]
 
     optimizer = set_optimizer_bisenet(
         net, lr_start=lr, weight_decay=wd, is_pretrained=is_pretrained

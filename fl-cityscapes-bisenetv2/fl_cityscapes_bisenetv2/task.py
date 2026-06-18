@@ -32,6 +32,7 @@ def train(
     strategy,
     prox_mu,
     neg_entropy_weight: float = 0.0,
+    lb_ignore: int = 255,
 ):
     """Train the model on the training set."""
     train_fn = train_bisenetv2 if model_name == "BiSeNetV2" else train_deeplabv3p
@@ -48,6 +49,7 @@ def train(
         prox_mu=prox_mu,
         neg_entropy_weight=neg_entropy_weight,
         num_aux_heads=num_aux_heads,
+        lb_ignore=lb_ignore,
     )
 
 
@@ -89,6 +91,7 @@ def make_central_evaluate(context: Context):
         im_root: str = context.run_config["im-root"]
         server_data_partition: str = context.run_config["server-data-partition"]
 
+        dataset_name: str = context.run_config["dataset-name"]
         num_classes: int = context.run_config["num-classes"]
         lb_ignore: int = context.run_config["lb-ignore"]
 
@@ -104,11 +107,12 @@ def make_central_evaluate(context: Context):
         sd = arrays.to_torch_state_dict()
         model.load_state_dict(sd, strict=True)
 
-        # Load the entire Cityscapes val dataset
+        # Load the validation dataset for the configured dataset
         eval_loader = load_server_eval_data(
             data_root=im_root,
             data_file=server_data_partition,
             batch_size=eval_batch_size,
+            dataset_name=dataset_name,
         )
 
         metrics = {}
