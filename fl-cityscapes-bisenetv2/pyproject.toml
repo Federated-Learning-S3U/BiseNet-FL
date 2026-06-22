@@ -26,13 +26,13 @@ clientapp = "fl_cityscapes_bisenetv2.client_app:app"
 
 # Server-side FL configs
 server-device = "cuda"
-model-name = "DeepLabV3PlusSmall" # Options: BiSeNetV2, DeepLabV3PlusLarge, DeepLabV3PlusSmall
+model-name = "BiSeNetV2" # Options: BiSeNetV2, DeepLabV3PlusLarge, DeepLabV3PlusSmall
 is-pretrained = false # Whether to start training from a pretrained checkpoint (true/false)
 
 # Dataset selection
 # Options: cityscapes (19 classes), bdd100k (19 classes), iddav3 (26 classes)
 # Changing this also requires updating num-classes and client/server data paths below.
-dataset-name = "cityscapes"
+dataset-name = "bdd100k"
 
 strategy-name = "FedAvg" # Options: FedAvg, FedAvgM, FedProx, FedEMA
 num-server-rounds = 2
@@ -61,7 +61,7 @@ proximity-mu = 0.005
 # Server-side Evaluation Configs
 eval-batch-size = 1
 eval-interval = 1
-server-data-partition = "./datasets/cityscapes/val.txt"
+server-data-partition = "./datasets/bdd100k/val.txt"
 
 # Server-side Saving Configs
 save-latest = "./res/latest_model.pt"
@@ -77,8 +77,8 @@ latest-metric = "./res/latest_metric.json"
 client-device = "cuda"
 
 # Client Dataset Paths
-im-root = "./datasets/cityscapes"
-client-data-partition = "./datasets/cityscapes/iid_partition_new.json"
+im-root = "./datasets/bdd100k"
+client-data-partition = "./datasets/bdd100k/iid_partition_10c.json"
 
 # Model Training Hyper-Params
 local-epochs = 3
@@ -99,7 +99,11 @@ lb-ignore = 255
 weight-decay = 5e-4
 ## Data Augmentation Configs
 scales = "[0.25, 2.0]"
-cropsize = "[512, 1024]"
+# cropsize per dataset:
+#   cityscapes  → [512, 1024]  (1:2 ratio, half of native 1024×2048)
+#   bdd100k     → [576, 1024]  (9:16 ratio, natural 0.8× of native 720×1280)
+#   iddav3      → [576, 1024]  (9:16 ratio, natural 0.53× of native 1080×1920)
+cropsize = "[576, 1024]"
 ## BiSeNetV2 Specific Configs
 num-aux-heads = 4
 

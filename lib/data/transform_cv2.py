@@ -173,6 +173,12 @@ class TransformationVal(object):
 
     def __call__(self, im_lb):
         im, lb = im_lb['im'], im_lb['lb']
+        h, w = im.shape[:2]
+        pad_h = (32 - h % 32) % 32
+        pad_w = (32 - w % 32) % 32
+        if pad_h > 0 or pad_w > 0:
+            im = np.pad(im, ((0, pad_h), (0, pad_w), (0, 0)))
+            lb = np.pad(lb, ((0, pad_h), (0, pad_w)), constant_values=255)
         return dict(im=im, lb=lb)
 
 
