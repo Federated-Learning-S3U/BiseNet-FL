@@ -129,4 +129,12 @@ tvm/
 /datasets/cityscapes/leftImg8bit/
 /datasets/cityscapes/gtFine/
 
+/datasets/bdd100k/color_labels/
+/datasets/bdd100k/images/
+/datasets/bdd100k/labels/
+
+/datasets/idda/color_labels/
+/datasets/idda/images/
+/datasets/idda/labels/
+
 *.pt
