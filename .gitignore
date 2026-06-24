@@ -137,4 +137,9 @@ tvm/
 /datasets/idda/images/
 /datasets/idda/labels/
 
+/datasets/idda-fl/color_labels/
+/datasets/idda-fl/images/
+/datasets/idda-fl/labels/
+/datasets/idda-fl/val/
+
 *.pt
